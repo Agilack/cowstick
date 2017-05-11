@@ -1,3 +1,4 @@
 (fp_lib_table
   (lib (name cowstick)(type KiCad)(uri "$(KIPRJMOD)/cowstick.pretty")(options "")(descr ""))
+  (lib (name cowstick-logos)(type KiCad)(uri "$(KIPRJMOD)/cowstick-logos.pretty")(options "")(descr ""))
 )
