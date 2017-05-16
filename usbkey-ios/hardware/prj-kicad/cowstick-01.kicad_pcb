@@ -13,6 +13,14 @@
   )
 
   (page A4)
+  (title_block
+    (title "Cowstick IO USB key")
+    (date 2017-05-11)
+    (rev 0.1)
+    (company Agilack)
+    (comment 1 "License CC-by-SA 2.0")
+  )
+
   (layers
     (0 F.Cu signal)
     (31 B.Cu signal hide)

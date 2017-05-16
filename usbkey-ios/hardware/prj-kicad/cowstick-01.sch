@@ -1,15 +1,16 @@
 EESchema Schematic File Version 2
 LIBS:cowstick
+LIBS:cowstick-01-cache
 EELAYER 25 0
 EELAYER END
 $Descr A4 11693 8268
 encoding utf-8
 Sheet 1 1
-Title ""
-Date ""
-Rev ""
-Comp ""
-Comment1 ""
+Title "Cowstick IO USB key"
+Date "2017-05-11"
+Rev "0.1"
+Comp "Agilack"
+Comment1 "License CC-by-SA 2.0"
 Comment2 ""
 Comment3 ""
 Comment4 ""
