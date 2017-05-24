@@ -68,6 +68,7 @@ static void clk_debug(void)
  */
 void USB_Handler(void)
 {
+	usb_irq();
 	/* Toggle LED value */
 	reg_wr(0x60000000 + 0x1C, (1 << 15));
 }

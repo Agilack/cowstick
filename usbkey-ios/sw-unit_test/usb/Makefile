@@ -16,7 +16,7 @@
 CROSS=arm-none-eabi-
 TARGET=ut-usb
 
-SRC = main.c hardware.c usb.c
+SRC = main.c hardware.c libc.c usb.c
 ASRC = startup.s
 
 CC = $(CROSS)gcc
@@ -26,6 +26,7 @@ EDBG = edbg
 
 CFLAGS  = -mcpu=cortex-m0plus -mthumb
 CFLAGS += -nostdlib -Os -ffunction-sections
+CFLAGS += -fno-builtin-memset
 
 LDFLAGS = -nostartfiles -T cowstick.ld -Wl,-Map=$(TARGET).map,--cref,--gc-sections -static
 
