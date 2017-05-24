@@ -14,6 +14,7 @@
  * This program is distributed WITHOUT ANY WARRANTY.
  */
 #include "hardware.h"
+#include "usb.h"
 
 static void clk_debug(void);
 
@@ -25,12 +26,21 @@ int main(void)
 {
 	hw_init();
 
-	/* Enable DFLL output on TP (for debug) */
-	clk_debug();
+	/* DIR: Set PA15 as output */
+	reg_wr(0x60000000 + 0x08, (1 << 15));
+	/* Set LED "OFF" */
+	reg_wr(0x60000000 + 0x18, (1 << 15));
+	/* PINCFG: Configure PA15 (normal strength, no pull, no pmux) */
+	reg8_wr(0x60000000 + 0x4F, 0x00);
+
+	usb_init();
+
+	usb_config();
 
 	while (1)
 		;
 }
+
 /**
  * @brief Connect 48MHz DFLL to test-pin
  *
@@ -38,6 +48,8 @@ int main(void)
 static void clk_debug(void)
 {
 	u32 v;
+
+	/* GCLK7 bit 19 must be set ! */
 
 	/* Set PA23 as output */
 	reg_wr(0x60000000 + 0x08, (1 << 23));
@@ -48,5 +60,15 @@ static void clk_debug(void)
 	v &= 0x0F;
 	v |= (0x07 << 4);
 	reg8_wr(0x60000000 + 0x3B, v);
+}
+
+/**
+ * @brief USB peripheral interrupt handler
+ *
+ */
+void USB_Handler(void)
+{
+	/* Toggle LED value */
+	reg_wr(0x60000000 + 0x1C, (1 << 15));
 }
 /* EOF */

@@ -74,7 +74,7 @@ static inline void hw_init_clock(void)
 	reg_wr(GCLK_ADDR + 0x04, (0 << 16) | (0x06 << 8) | 0x06);
 	/* Set Divisor for GCLK7 : enabled, DFLL48M, no divisor */
 	reg_wr(GCLK_ADDR + 0x08, (1 << 8) | 0x07);
-	reg_wr(GCLK_ADDR + 0x04, (1 <<  19) | (1 << 16) | (0x07 << 8) | 0x07);
+	reg_wr(GCLK_ADDR + 0x04, (1 << 16) | (0x07 << 8) | 0x07);
 	/* Set Divisor for GCLK8 : disabled */
 	reg_wr(GCLK_ADDR + 0x08, (1 << 8) | 0x08);
 	reg_wr(GCLK_ADDR + 0x04, (0 << 16) | (0x06 << 8) | 0x08);

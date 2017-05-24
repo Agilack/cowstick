@@ -16,7 +16,7 @@
 CROSS=arm-none-eabi-
 TARGET=ut-usb
 
-SRC = main.c hardware.c
+SRC = main.c hardware.c usb.c
 ASRC = startup.s
 
 CC = $(CROSS)gcc
