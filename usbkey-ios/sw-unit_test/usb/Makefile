@@ -26,7 +26,7 @@ EDBG = edbg
 
 CFLAGS  = -mcpu=cortex-m0plus -mthumb
 CFLAGS += -nostdlib -Os -ffunction-sections
-CFLAGS += -fno-builtin-memset
+CFLAGS += -fno-builtin-memcpy -fno-builtin-memset
 
 LDFLAGS = -nostartfiles -T cowstick.ld -Wl,-Map=$(TARGET).map,--cref,--gc-sections -static
 

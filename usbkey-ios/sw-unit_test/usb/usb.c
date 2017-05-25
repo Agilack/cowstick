@@ -19,6 +19,12 @@
 #include "usb.h"
 
 static void _usb_load_calib(void);
+void usb_ep_enable(u8 ep, u8 mode, usb_module *mod);
+void usb_reset(usb_module *mod);
+static void ep_irq(usb_module *mod, u8 ep);
+static void ep_transfer_in(usb_module *mod, u8 ep, int isr);
+static void ep_transfer_setup(usb_module *mod, u8 ep);
+void usb_trans_setup(usb_module *mod, u8 ep);
 
 ep_desc eps[8];
 
@@ -26,7 +32,7 @@ ep_desc eps[8];
  * @brief Initialize and start USB peripheral (device mode)
  *
  */
-void usb_config(void)
+void usb_config(usb_module *mod)
 {
 	memset(eps, 0, sizeof(ep_desc) * 8);
 
@@ -105,8 +111,9 @@ void usb_init(void)
 /**
  * @brief Interrupt handler
  *
+ * @param mod Pointer to the USB module configuration
  */
-void usb_irq(void)
+void usb_irq(usb_module *mod)
 {
 	u32 status;
 	u16 epint = reg16_rd(USB_ADDR + 0x20);
@@ -116,46 +123,81 @@ void usb_irq(void)
 	/* Keep only enable bits */
 	status &= reg16_rd(USB_ADDR + 0x18);
 
-	/* If Start-Of-Frame interrupt is set */
-	if (status & (1 << 2))
+	if (status)
 	{
-		/* Ack/clear event */
-		reg16_wr(USB_ADDR + 0x1C, (1 << 2));
+		/* If Start-Of-Frame interrupt is set */
+		if (status & (1 << 2))
+		{
+			/* Ack/clear event */
+			reg16_wr(USB_ADDR + 0x1C, (1 << 2));
+		}
+		/* EORST */
+		if (status & (1 << 3))
+		{
+			/* Ack/clear this event */
+			reg16_wr(USB_ADDR + 0x1C, (1 << 3));
+			/* Enable Suspend interrupt */
+			reg16_wr(USB_ADDR + 0x18, (1 << 0));
+
+			/* Bus has been reset, reset module and status */
+			usb_reset(mod);
+		}
+		/* If the WAKEUP bit is set */
+		if (status & (1 << 4))
+		{
+			/* Disable WAKEUP interrupt */
+			reg16_wr(USB_ADDR + 0x14, (1 << 4));
+			/* Ack/clear event */
+			reg16_wr(USB_ADDR + 0x1C, (1 << 4));
+			/* Enable SUSPEND interrupt */
+			reg16_wr(USB_ADDR + 0x18, (1 << 0));
+		}
+		/* If the SUSPEND bit is set */
+		if (status & (1 << 0))
+		{
+			/* Disable SUSPEND interrupt */
+			reg16_wr(USB_ADDR + 0x14, (1 << 0));
+			/* Ack/clear event */
+			reg16_wr(USB_ADDR + 0x1C, (1 << 0));
+			/* Enable WAKEUP interrupt */
+			reg16_wr(USB_ADDR + 0x18, (1 << 4));
+		}
+		/* If RAMACR bit is set */
+		if (status & (1 << 7))
+		{
+			/* Ack/clear event */
+			reg16_wr(USB_ADDR + 0x1C, (1 << 7));
+		}
 	}
-	/* EORST */
-	if (status & (1 << 3))
+	else if (epint)
 	{
-		/* Ack/clear this event */
-		reg16_wr(USB_ADDR + 0x1C, (1 << 3));
-		/* Enable Suspend interrupt */
-		reg16_wr(USB_ADDR + 0x18, (1 << 0));
+		ep_irq(mod, 0);
 	}
-	/* If the WAKEUP bit is set */
-	if (status & (1 << 4))
-	{
-		/* Disable WAKEUP interrupt */
-		reg16_wr(USB_ADDR + 0x14, (1 << 4));
-		/* Ack/clear event */
-		reg16_wr(USB_ADDR + 0x1C, (1 << 4));
-		/* Enable SUSPEND interrupt */
-		reg16_wr(USB_ADDR + 0x18, (1 << 0));
-	}
-	/* If the SUSPEND bit is set */
-	if (status & (1 << 0))
-	{
-		/* Disable SUSPEND interrupt */
-		reg16_wr(USB_ADDR + 0x14, (1 << 0));
-		/* Ack/clear event */
-		reg16_wr(USB_ADDR + 0x1C, (1 << 0));
-		/* Enable WAKEUP interrupt */
-		reg16_wr(USB_ADDR + 0x18, (1 << 4));
-	}
-	/* If RAMACR bit is set */
-	if (status & (1 << 7))
-	{
-		/* Ack/clear event */
-		reg16_wr(USB_ADDR + 0x1C, (1 << 7));
-	}
+}
+
+/**
+ * @brief Reset state of module after a bus reset
+ *
+ * @param mod Pointer to the USB module configuration
+ */
+void usb_reset(usb_module *mod)
+{
+	/* Reset EP0 type */
+	reg8_wr(USB_ADDR + 0x100, 0x00);
+
+	/* Ack/clear EORST event */
+	reg16_wr(USB_ADDR + 0x1C, (1 << 3));
+	/* Disable WAKEUP interrupt */
+	reg16_wr(USB_ADDR + 0x14, (1 << 4));
+	/* Enable SUSPEND interrupt */
+	reg16_wr(USB_ADDR + 0x18, (1 << 0));
+
+	/* Clear EP descriptors config */
+	memset(&mod->ep_desc, 0, sizeof(ep_desc) * 8);
+
+	mod->addr = 0;
+
+	usb_ep_enable(0, 0x11, mod);
 }
 
 /**
@@ -193,4 +235,218 @@ static void _usb_load_calib(void)
 
 	reg8_wr(USB_ADDR + 0x03, (3 << 0) | (3 << 2));
 }
+
+void usb_ep_enable(u8 ep, u8 mode, usb_module *mod)
+{
+	reg8_wr(USB_ADDR + 0x100 + (ep * 0x20), mode);
+
+	mod->ep_desc[ep].b0_pcksize = 0x30100000;
+	mod->ep_desc[ep].b1_pcksize = 0x30000040;
+
+	/* Disable bank 0 (set BK0RDY)   */
+	reg8_wr(USB_ADDR + 0x105, (1 << 6));
+	/* Disable bank 1 (clear BK1RDY) */
+	reg8_wr(USB_ADDR + 0x104, (1 << 7));
+
+	usb_trans_setup(mod, ep);
+}
+
+static void ep_irq(usb_module *mod, u8 ep)
+{
+	u8 flags = reg8_rd(USB_ADDR + 0x107);
+
+	/* If the busy flag is not set */
+	if ((mod->flags & 1) == 0)
+	{
+		/* ==== Setup transaction ==== */
+
+		if (flags & (1 << 4))
+			ep_transfer_setup(mod, 0);
+		/* If STALL1 bit is set */
+		else if (flags & (1 << 6))
+		{
+			// ToDo
+		}
+		/* If STALL0 bit is set */
+		else if (flags & (1 << 5))
+		{
+			// ToDo
+		}
+
+	}
+	/* If the DIR flag is set : IN */
+	else if (mod->flags & 2)
+	{
+		/* If Tranfser Stall on bank 1 (TRSTALL1) */
+		if (flags & (1 << 6))
+		{
+			/* Ack/clear event */
+			reg8_wr(USB_ADDR + 0x107, (1 << 6));
+		}
+		/* If Tranfser Fail on bank 1 (TRFAIL1) */
+		else if (flags & (1 << 3))
+		{
+			/* Clear Bank1 status */
+			mod->ep_desc[ep].b1_status_bk = 0;
+			//hri_usbendpoint_clear_EPINTFLAG_reg(hw, epn, fail[bank_n]);
+			reg8_wr(USB_ADDR + 0x107, (1 << 3));
+			//hri_usbendpoint_clear_EPINTEN_reg(hw, epn, fail[bank_n]);
+			reg8_wr(USB_ADDR + 0x108, (1 << 3));
+		}
+		/* If Transfer Complete on bank 1 (TRCPT1) */
+		else if (flags & (1 << 1))
+		{
+			// ToDo: Send next data packet (if any)
+			ep_transfer_in(mod, ep, 1);
+
+			//if (ctrl)
+			reg8_wr(USB_ADDR + 0x108, 0x4A | 0x01);
+			//else
+			//reg8_wr(USB_ADDR + 0x108, 0x4A);
+
+			// ToDo: set busy = 0
+			// ToDo: end of transfer ... callback ?
+
+			/* Ack/clear the TRCPT interrupt */
+			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1 << 1));
+		}
+//		else if (ctrl)
+//		{
+//			//
+//		}
+	}
+	/* Else, OUT */
+	else
+	{
+		/* If Transfer Complete on bank 0 (TRCPT0) */
+		if (flags & (1 << 0))
+		{
+			mod->ep_desc[ep].b0_status_bk = 0;
+			mod->ep_desc[ep].b1_status_bk = 0;
+			mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
+			/* Clear BK1RDY */
+//			reg8_wr(USB_ADDR + 0x104, (1 << 7));
+			/* Set BK0RDY */
+//			reg8_wr(USB_ADDR + 0x105, (1 << 6));
+			/* Enable RXSTP interrupt */
+			reg8_wr(USB_ADDR + 0x109, (1 << 4));
+			/* Ack/clear the TRCPT interrupt */
+			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1 << 0));
+		}
+		/* If a Tranfer Fail has been detected (TRFAIL) */
+		else if (flags & (1 << 2))
+		{
+			reg8_wr(USB_ADDR + 0x107, (1 << 2));
+		}
+	}
+}
+
+/**
+ * @brief Initiate (or continue) a IN transfer data phase
+ *
+ * @param mod Pointer to the USB module configuration
+ * @param ep  Endpoint number
+ * @param isr True when called by an interrupt
+ */
+static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
+{
+	int len   = 64;
+	int count = 0;
+
+	// ToDO : ACK TRCPT0 if called by ISR
+
+	/* Set buffer address */
+	mod->ep_desc[ep].b1_addr = (u32)&mod->ctrl_in;
+	/* Set buffer length */
+	mod->ep_desc[ep].b1_pcksize = 0x30000000 | len;
+
+	/* Set All interrupts */
+	reg8_wr(USB_ADDR + 0x109, 0x35);
+
+	/* Set BK1RDY */
+	reg8_wr(USB_ADDR + 0x105, (1 << 7));
+}
+
+/**
+ * @brief Handle a transfer in SETUP phase
+ *
+ * @param mod Pointer to the USB module configuration
+ * @param ep  Endpoint number
+ */
+static void ep_transfer_setup(usb_module *mod, u8 ep)
+{
+	int i;
+	u16 bytes = (mod->ep_desc[ep].b0_pcksize & 0x3FF);
+
+//	if ( ! ctrl )
+//		return;
+
+	/* Clear bank status */
+	mod->ep_desc[ep].b0_status_bk = 0;
+	mod->ep_desc[ep].b1_status_bk = 0;
+	/* Ack event (all bank 0 and all bank 1) */
+	reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), 0x4A | 0x25);
+	/* Disable transfer interrupts (all bank 0 and all bank 1) */
+	reg8_wr(USB_ADDR + 0x108 + (ep * 0x20), 0x4A | 0x25);
+
+	/* Callback */
+	if (bytes > 0)
+	{
+		/* GET_DESCRIPTOR */
+		if ((mod->ctrl[0] == 0x80) && (mod->ctrl[1] == 0x06))
+		{
+			/* Copy descriptor into ep buffer */
+			memcpy(mod->ctrl_in, mod->desc, 0x12);
+			/* Configure and start transfer */
+			mod->flags |= 1; // Set busy
+			mod->flags |= 2; // Set dir IN
+			ep_transfer_in(mod, ep, 0);
+
+			/* Ack/clear the RXSTP interrupt */
+			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
+		}
+		/* SET_ADDRESS */
+		else if ((mod->ctrl[0] == 0x00) && (mod->ctrl[1] == 0x05))
+		{
+			/* Save device address */
+			mod->addr = mod->ctrl[2];
+
+			memset(mod->ctrl_in, 0, 64);
+			mod->flags |=  1; // Set busy
+			mod->flags |=  2; // Set dir IN
+			mod->flags |= 0x10; // Debug flag
+			ep_transfer_in(mod, ep, 0);
+
+			/* Set buffer address */
+			//mod->ep_desc[ep].b0_addr = (u32)&mod->ctrl_in;
+			/* Set buffer length : 0 (ZLP) */
+			//mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14);
+			//mod->ep_desc[ep].b0_pcksize = 0x30000000;
+			/* Set All interrupts */
+			//reg8_wr(USB_ADDR + 0x109, 0x35);
+			/* Set BK0RDY */
+			//reg8_wr(USB_ADDR + 0x105, (1 << 6));
+			/* Clear BK0RDY */
+			//reg8_wr(USB_ADDR + 0x104, (1 << 6));
+
+			/* Ack/clear the RXSTP interrupt */
+			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
+		}
+	}
+}
+
+void usb_trans_setup(usb_module *mod, u8 ep)
+{
+	mod->ep_desc[ep].b0_addr = (u32)mod->ctrl;
+	mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
+
+	/* Clear EP Status (BK1RDY and STALLRQx) */
+	reg8_wr(USB_ADDR + 0x104 + (ep * 20), (1 << 7) | (0x03 << 4));
+	/* Set BK0 */
+	reg8_wr(USB_ADDR + 0x105 + (ep * 20), (1 << 6));
+
+	/* Enable RXSTP interrupt */
+	reg8_wr(USB_ADDR + 0x109 + (ep * 20), (1 << 4));
+}
+
 /* EOF */

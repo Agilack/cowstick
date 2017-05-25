@@ -16,6 +16,7 @@
 #ifndef LIBC_H
 #define LIBC_H
 
+void *memcpy (void *dst, const void *src, int n);
 void *memset (void *dst, int value, int n);
 
 #endif

@@ -16,6 +16,22 @@
 #include "libc.h"
 #include "types.h"
 
+void *memcpy(void *dst, const void *src, int n)
+{
+        u8 *s;
+        u8 *d;
+        s = (u8*)src;
+        d = (u8*)dst;
+        while(n)
+        {
+                *d = *s;
+                s ++;
+                d ++;
+                n --;
+        }
+        return(dst);
+}
+
 void *memset(void *dst, int value, int n)
 {
         u8 *d;

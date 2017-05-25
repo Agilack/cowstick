@@ -18,6 +18,8 @@
 
 static void clk_debug(void);
 
+usb_module mod;
+
 /**
  * @brief Entry point and main loop of the unit-test
  *
@@ -35,7 +37,7 @@ int main(void)
 
 	usb_init();
 
-	usb_config();
+	usb_config(&mod);
 
 	while (1)
 		;
@@ -68,7 +70,7 @@ static void clk_debug(void)
  */
 void USB_Handler(void)
 {
-	usb_irq();
+	usb_irq(&mod);
 	/* Toggle LED value */
 	reg_wr(0x60000000 + 0x1C, (1 << 15));
 }
