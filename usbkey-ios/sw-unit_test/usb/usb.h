@@ -32,6 +32,13 @@ typedef struct __attribute__((packed))
 	u8  b1_reserved[5];
 } ep_desc;
 
+typedef struct
+{
+	int size;  /* Number of bytes to transfer        */
+	int count; /* Number of already transfered bytes */
+	u32 flags;
+} ep_status;
+
 typedef struct usb_module
 {
 	ep_desc ep_desc[8]; /* Endpoint descriptors (see datasheet 32.8.4.1) */
@@ -39,9 +46,9 @@ typedef struct usb_module
 	u8      ctrl_in[64];
 	/* After here, unaligned datas */
 	u8        addr;     /* Device address on bus  */
+	ep_status ep_status[8];
 	u8       *desc;     /* Pointer to descriptors */
 	int       desc_len; /* Length of descriptors  */
-	u32       flags;
 } usb_module;
 
 void usb_config(usb_module *mod);

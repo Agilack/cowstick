@@ -23,6 +23,7 @@ void usb_ep_enable(u8 ep, u8 mode, usb_module *mod);
 void usb_reset(usb_module *mod);
 static void ep_irq(usb_module *mod, u8 ep);
 static void ep_transfer_in(usb_module *mod, u8 ep, int isr);
+static void ep_transfer_out  (usb_module *mod, u8 ep, int isr);
 static void ep_transfer_setup(usb_module *mod, u8 ep);
 void usb_trans_setup(usb_module *mod, u8 ep);
 
@@ -256,7 +257,7 @@ static void ep_irq(usb_module *mod, u8 ep)
 	u8 flags = reg8_rd(USB_ADDR + 0x107);
 
 	/* If the busy flag is not set */
-	if ((mod->flags & 1) == 0)
+	if ((mod->ep_status[ep].flags & 1) == 0)
 	{
 		/* ==== Setup transaction ==== */
 
@@ -275,7 +276,7 @@ static void ep_irq(usb_module *mod, u8 ep)
 
 	}
 	/* If the DIR flag is set : IN */
-	else if (mod->flags & 2)
+	else if (mod->ep_status[ep].flags & 2)
 	{
 		/* If Tranfser Stall on bank 1 (TRSTALL1) */
 		if (flags & (1 << 6))
@@ -341,6 +342,24 @@ static void ep_irq(usb_module *mod, u8 ep)
 	}
 }
 
+static void ep_transfer_complete(usb_module *mod, u8 ep)
+{
+	mod->ep_status[ep].flags &= ~0x03;
+
+	if (mod->ep_status[ep].flags & 0x10)
+	{
+		mod->ep_status[ep].flags &= ~0x10;
+		if (mod->addr != 0)
+			/* Set device address */
+			reg8_wr(USB_ADDR + 0x0A, (1 << 7) | mod->addr);
+	}
+	else
+	{
+		mod->ep_status[ep].size   = 0;
+		ep_transfer_out(mod, ep, 0);
+	}
+}
+
 /**
  * @brief Initiate (or continue) a IN transfer data phase
  *
@@ -350,21 +369,83 @@ static void ep_irq(usb_module *mod, u8 ep)
  */
 static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 {
-	int len   = 64;
+	int len   = mod->ep_status[ep].size;
 	int count = 0;
 
 	// ToDO : ACK TRCPT0 if called by ISR
 
+	/* Update the number of processed bytes */
+	mod->ep_status[ep].count += count;
+
+	if (mod->ep_status[ep].count < mod->ep_status[ep].size)
+	{
+		/* Set buffer address */
+		mod->ep_desc[ep].b1_addr = (u32)&mod->ctrl_in;
+		/* Set buffer length */
+		mod->ep_desc[ep].b1_pcksize = 0x30000000 | len;
+
+		/* Set All interrupts */
+		reg8_wr(USB_ADDR + 0x109, 0x35);
+
+		/* Set BK1RDY */
+		reg8_wr(USB_ADDR + 0x105, (1 << 7));
+	}
+	/* Zero Length Packet */
+	else if (mod->ep_status[ep].flags & 4)
+	{
+		/* Clear ZLP flag after use it */
+		mod->ep_status[ep].flags &= ~4;
+		/* Set buffer address */
+		mod->ep_desc[ep].b1_addr = (u32)&mod->ctrl_in;
+		/* Set buffer length */
+		mod->ep_desc[ep].b1_pcksize = 0x30000000;
+
+		/* Set All interrupts */
+		reg8_wr(USB_ADDR + 0x109, 0x35);
+
+		/* Set BK1RDY */
+		reg8_wr(USB_ADDR + 0x105, (1 << 7));
+	}
+	else
+	{
+		ep_transfer_complete(mod, ep);
+	}
+}
+
+/**
+ * @brief Initiate (or continue) a OUT transfer data phase
+ *
+ * @param mod Pointer to the USB module configuration
+ * @param ep  Endpoint number
+ */
+static void ep_transfer_out(usb_module *mod, u8 ep, int isr)
+{
+	int len = mod->ep_status[ep].size;
+
+	if (isr)
+		mod->ep_desc[ep].b0_status_bk = 0;
+
 	/* Set buffer address */
-	mod->ep_desc[ep].b1_addr = (u32)&mod->ctrl_in;
-	/* Set buffer length */
-	mod->ep_desc[ep].b1_pcksize = 0x30000000 | len;
+	mod->ep_desc[ep].b0_addr = (u32)&mod->ctrl_in;
+	if (len == 0)
+	{
+		u32 pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
+		/* Set buffer length : 0 (ZLP) */
+		mod->ep_desc[ep].b0_pcksize = pcksize;
+	}
+	else
+	{
+		/* Set buffer length : 0 (ZLP) */
+		mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14);
+	}
+
+	mod->ep_desc[ep].b1_status_bk = 0;
 
 	/* Set All interrupts */
 	reg8_wr(USB_ADDR + 0x109, 0x35);
 
-	/* Set BK1RDY */
-	reg8_wr(USB_ADDR + 0x105, (1 << 7));
+	/* Clear BK0RDY */
+	reg8_wr(USB_ADDR + 0x104, (1 << 6));
 }
 
 /**
@@ -398,8 +479,9 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 			/* Copy descriptor into ep buffer */
 			memcpy(mod->ctrl_in, mod->desc, 0x12);
 			/* Configure and start transfer */
-			mod->flags |= 1; // Set busy
-			mod->flags |= 2; // Set dir IN
+			mod->ep_status[ep].size   = 0x12;
+			mod->ep_status[ep].flags |= 1; // Set busy
+			mod->ep_status[ep].flags |= 2; // Set dir IN
 			ep_transfer_in(mod, ep, 0);
 
 			/* Ack/clear the RXSTP interrupt */
@@ -412,9 +494,11 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 			mod->addr = mod->ctrl[2];
 
 			memset(mod->ctrl_in, 0, 64);
-			mod->flags |=  1; // Set busy
-			mod->flags |=  2; // Set dir IN
-			mod->flags |= 0x10; // Debug flag
+			mod->ep_status[ep].size = 0x00;
+			mod->ep_status[ep].flags |=  1; // Set busy
+			mod->ep_status[ep].flags |=  2; // Set dir IN
+			mod->ep_status[ep].flags |=  4; // ZLP
+			mod->ep_status[ep].flags |= 0x10; // Debug flag
 			ep_transfer_in(mod, ep, 0);
 
 			/* Set buffer address */
