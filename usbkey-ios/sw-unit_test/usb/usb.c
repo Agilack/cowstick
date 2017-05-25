@@ -27,15 +27,20 @@ static void ep_transfer_out  (usb_module *mod, u8 ep, int isr);
 static void ep_transfer_setup(usb_module *mod, u8 ep);
 void usb_trans_setup(usb_module *mod, u8 ep);
 
-ep_desc eps[8];
-
 /**
  * @brief Initialize and start USB peripheral (device mode)
  *
  */
 void usb_config(usb_module *mod)
 {
-	memset(eps, 0, sizeof(ep_desc) * 8);
+	int i;
+
+	for (i = 0; i < 8; i++)
+	{
+		mod->ep_status[i].size  = 0;
+		mod->ep_status[i].count = 0;
+		mod->ep_status[i].flags = 0;
+	}
 
 	/* Wait end of a synchronization reset */
 	while (reg8_rd(USB_ADDR + 0x02) & 0x01)
@@ -51,7 +56,7 @@ void usb_config(usb_module *mod)
 	/* Set RUNSTDBY to keep clock active in standby mode */
 	reg8_wr(USB_ADDR + 0x00, reg8_rd(USB_ADDR + 0x00) | (1 << 2));
 	/* Set address of endpoints descriptors structure */
-	reg_wr(USB_ADDR + 0x24, (u32)&eps);
+	reg_wr(USB_ADDR + 0x24, (u32)&mod->ep_desc);
 	/* Set DETACH bit to avoid early USB connection */
 	reg16_wr(USB_ADDR + 0x08, (0x00 << 2) | 1);
 	
@@ -244,6 +249,9 @@ void usb_ep_enable(u8 ep, u8 mode, usb_module *mod)
 	mod->ep_desc[ep].b0_pcksize = 0x30100000;
 	mod->ep_desc[ep].b1_pcksize = 0x30000040;
 
+	mod->ep_status[ep].flags = 0;
+	mod->ep_status[ep].size = 0;
+
 	/* Disable bank 0 (set BK0RDY)   */
 	reg8_wr(USB_ADDR + 0x105, (1 << 6));
 	/* Disable bank 1 (clear BK1RDY) */
@@ -298,6 +306,7 @@ static void ep_irq(usb_module *mod, u8 ep)
 		else if (flags & (1 << 1))
 		{
 			// ToDo: Send next data packet (if any)
+			mod->ep_status[ep].size = 0; // Temporary
 			ep_transfer_in(mod, ep, 1);
 
 			//if (ctrl)
