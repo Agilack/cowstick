@@ -39,9 +39,10 @@ typedef struct __attribute__((packed))
 
 typedef struct
 {
-	int size;  /* Number of bytes to transfer        */
-	int count; /* Number of already transfered bytes */
+	int size;   /* Number of bytes to transfer        */
+	int count;  /* Number of already transfered bytes */
 	u32 flags;
+	u8  *data;  /* Pointer to the data buffer */
 } ep_status;
 
 typedef struct usb_module

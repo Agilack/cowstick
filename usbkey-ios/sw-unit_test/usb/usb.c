@@ -25,7 +25,6 @@ static void ep_irq(usb_module *mod, u8 ep);
 static void ep_transfer_in(usb_module *mod, u8 ep, int isr);
 static void ep_transfer_out  (usb_module *mod, u8 ep, int isr);
 static void ep_transfer_setup(usb_module *mod, u8 ep);
-void usb_trans_setup(usb_module *mod, u8 ep);
 static void std_get_descriptor(usb_module *mod);
 
 /**
@@ -35,6 +34,9 @@ static void std_get_descriptor(usb_module *mod);
 void usb_config(usb_module *mod)
 {
 	int i;
+
+	/* Reset bus address value */
+	mod->addr = 0;
 
 	for (i = 0; i < 8; i++)
 	{
@@ -61,7 +63,7 @@ void usb_config(usb_module *mod)
 	/* Set DETACH bit to avoid early USB connection */
 	reg16_wr(USB_ADDR + 0x08, (0x00 << 2) | 1);
 	
-	/* ------------------------------------------------------------------ */
+	/* ToDo: Here, initialize Classes layers */
 
 	/* Verify SYNCBUSY */
 	if (reg8_rd(USB_ADDR + 0x02) & 0x03) {
@@ -130,7 +132,7 @@ void usb_irq(usb_module *mod)
 	/* Keep only enable bits */
 	status &= reg16_rd(USB_ADDR + 0x18);
 
-	if (status)
+	if (epint == 0)
 	{
 		/* If Start-Of-Frame interrupt is set */
 		if (status & (1 << 2))
@@ -258,7 +260,18 @@ void usb_ep_enable(u8 ep, u8 mode, usb_module *mod)
 	/* Disable bank 1 (clear BK1RDY) */
 	reg8_wr(USB_ADDR + 0x104, (1 << 7));
 
-	usb_trans_setup(mod, ep);
+	/* 2) Setup for first transfer */
+
+	mod->ep_desc[ep].b0_addr = (u32)mod->ctrl;
+	mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
+
+	/* Clear EP Status (BK1RDY and STALLRQx) */
+	reg8_wr(USB_ADDR + 0x104 + (ep * 20), (1 << 7) | (0x03 << 4));
+	/* Set BK0 */
+	reg8_wr(USB_ADDR + 0x105 + (ep * 20), (1 << 6));
+
+	/* Enable RXSTP interrupt */
+	reg8_wr(USB_ADDR + 0x109 + (ep * 20), (1 << 4));
 }
 
 static void ep_irq(usb_module *mod, u8 ep)
@@ -266,7 +279,7 @@ static void ep_irq(usb_module *mod, u8 ep)
 	u8 flags = reg8_rd(USB_ADDR + 0x107);
 
 	/* If the busy flag is not set */
-	if ((mod->ep_status[ep].flags & 1) == 0)
+	if ((mod->ep_status[ep].flags & EP_BUSY) == 0)
 	{
 		/* ==== Setup transaction ==== */
 
@@ -306,7 +319,7 @@ static void ep_irq(usb_module *mod, u8 ep)
 		/* If Transfer Complete on bank 1 (TRCPT1) */
 		else if (flags & (1 << 1))
 		{
-			// ToDo: Send next data packet (if any)
+			/* Send next data packet (if any) */
 			ep_transfer_in(mod, ep, 1);
 
 			//if (ctrl)
@@ -317,10 +330,6 @@ static void ep_irq(usb_module *mod, u8 ep)
 			/* Ack/clear the TRCPT interrupt */
 			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1 << 1));
 		}
-//		else if (ctrl)
-//		{
-//			//
-//		}
 	}
 	/* Else, OUT */
 	else
@@ -334,11 +343,12 @@ static void ep_irq(usb_module *mod, u8 ep)
 		/* If Transfer Complete on bank 0 (TRCPT0) */
 		if (flags & (1 << 0))
 		{
+			/* Get next data packet (if any) */
 			ep_transfer_out(mod, ep, 1);
 			/* Ack/clear the TRCPT interrupt */
 			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1 << 0));
 		}
-		/* If a Tranfer Fail has been detected (TRFAIL) */
+		/* If a Tranfer Fail has been detected (TRFAIL0) */
 		else if (flags & (1 << 2))
 		{
 			/* Clear Bank0 status */
@@ -366,6 +376,10 @@ static void ep_transfer_complete(usb_module *mod, u8 ep)
 			/* Set device address */
 			reg8_wr(USB_ADDR + 0x0A, (1 << 7) | mod->addr);
 	}
+	else if (mod->ep_status[ep].flags & 0x20)
+	{
+		mod->ep_status[ep].flags &= ~0x20;
+	}
 	else
 	{
 		if (dir)
@@ -389,7 +403,7 @@ static void ep_transfer_complete(usb_module *mod, u8 ep)
  */
 static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 {
-	int len   = mod->ep_status[ep].size;
+	int len   = 0;
 	int count = 0;
 
 	if (isr)
@@ -400,15 +414,27 @@ static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 	/* Update the number of processed bytes */
 	mod->ep_status[ep].count += count;
 
+	/* Compute length of datas to send */
+	len = mod->ep_status[ep].size - mod->ep_status[ep].count;
+	if (len > 64)
+		len = 64; // ToDo: use en size instead of fixed value
+
 	if (mod->ep_status[ep].count < mod->ep_status[ep].size)
 	{
+		int tlen;
+		u8 *buffer = mod->ep_status[ep].data;
+		buffer += mod->ep_status[ep].count;
+
+		/* Copy data into EP cache */
+		memcpy(mod->ctrl_in, buffer, len);
+
 		/* Set buffer address */
 		mod->ep_desc[ep].b1_addr = (u32)&mod->ctrl_in;
 		/* Set buffer length */
 		mod->ep_desc[ep].b1_pcksize = 0x30000000 | len;
 
 		/* Set All interrupts */
-		reg8_wr(USB_ADDR + 0x109, 0x35);
+		reg8_wr(USB_ADDR + 0x109, 0x4A);
 
 		/* Set BK1RDY */
 		reg8_wr(USB_ADDR + 0x105, (1 << 7));
@@ -528,21 +554,35 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 			/* Ack/clear the RXSTP interrupt */
 			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
 		}
+		/* SET_CONFIGURATION */
+		else if ((mod->ctrl[0] == 0x00) && (mod->ctrl[1] == 0x09))
+		{
+			mod->ep_status[ep].count  = 0;
+			mod->ep_status[ep].size   = 0x00;
+			mod->ep_status[ep].flags |=  EP_BUSY;
+			mod->ep_status[ep].flags |=  2; // Set dir IN
+			mod->ep_status[ep].flags |=  EP_ZLP;
+			mod->ep_status[ep].flags |= 0x20; // Debug flag
+			ep_transfer_in(mod, ep, 0);
+
+			/* Ack/clear the RXSTP interrupt */
+			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
+		}
+		/* SET_INTERFACE */
+		else if ((mod->ctrl[0] == 0x01) && (mod->ctrl[1] == 0x0B))
+		{
+			mod->ep_status[ep].count  = 0;
+			mod->ep_status[ep].size   = 0x00;
+			mod->ep_status[ep].flags |=  EP_BUSY;
+			mod->ep_status[ep].flags |=  2; // Set dir IN
+			mod->ep_status[ep].flags |=  EP_ZLP;
+			mod->ep_status[ep].flags |= 0x20; // Debug flag
+			ep_transfer_in(mod, ep, 0);
+
+			/* Ack/clear the RXSTP interrupt */
+			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
+		}
 	}
-}
-
-void usb_trans_setup(usb_module *mod, u8 ep)
-{
-	mod->ep_desc[ep].b0_addr = (u32)mod->ctrl;
-	mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
-
-	/* Clear EP Status (BK1RDY and STALLRQx) */
-	reg8_wr(USB_ADDR + 0x104 + (ep * 20), (1 << 7) | (0x03 << 4));
-	/* Set BK0 */
-	reg8_wr(USB_ADDR + 0x105 + (ep * 20), (1 << 6));
-
-	/* Enable RXSTP interrupt */
-	reg8_wr(USB_ADDR + 0x109 + (ep * 20), (1 << 4));
 }
 
 static void std_get_descriptor(usb_module *mod)
@@ -550,11 +590,10 @@ static void std_get_descriptor(usb_module *mod)
 	/* Device Descriptor */
 	if (mod->ctrl[3] == 1)
 	{
-		/* Copy descriptor into ep buffer */
-		memcpy(mod->ctrl_in, mod->desc, 0x12);
 		/* Configure and start transfer */
 		mod->ep_status[0].count  = 0;
 		mod->ep_status[0].size   = 0x12;
+		mod->ep_status[0].data   = mod->desc;
 		mod->ep_status[0].flags |= EP_BUSY;
 		mod->ep_status[0].flags |= 2; // Set dir IN
 		ep_transfer_in(mod, 0, 0);
@@ -562,19 +601,46 @@ static void std_get_descriptor(usb_module *mod)
 	/* Configuration descriptor */
 	else if (mod->ctrl[3] == 2)
 	{
-		u8 desc[] = { 0x09, 0x02,
-			34, 0x00,   /* wTotalLength        */
-			0x01,       /* bNumInterfaces      */
-			0x01,       /* bConfigurationValue */
-			0x00,       /* iConfiguration      */
-			0x80,       /* bmAttributes : Bus Powered */
-			0x32};      /* MaxPower : 100mA    */
+		u8 *data;
+		u16 wLength;
+		int clen;
+		int i;
+
+		data = (mod->desc + 22); // ToDo : Remove dirty fixed offset
+		wLength = ((mod->ctrl[7] << 8) | mod->ctrl[6]);
+
+		if (wLength <= 64)
+			clen = wLength;
+		else
+			clen = 64;
 
 		/* Copy descriptor into ep buffer */
-		memcpy(mod->ctrl_in, desc, 0x09);
+		memcpy(mod->ctrl_in, data, clen);
 		/* Configure and start transfer */
 		mod->ep_status[0].count  = 0;
-		mod->ep_status[0].size   = 0x09;
+		mod->ep_status[0].size   = wLength;
+		mod->ep_status[0].data   = data;
+		mod->ep_status[0].flags |= EP_BUSY;
+		mod->ep_status[0].flags |= 2; // Set dir IN
+		ep_transfer_in(mod, 0, 0);
+	}
+	/* String Descriptor */
+	else if (mod->ctrl[3] == 3)
+	{
+		int str_index = mod->ctrl[2];
+		u8 *data;
+		int len = 0;
+
+		if (str_index == 0)
+		{
+			data = (mod->desc + 18);
+			len  = 4;
+		}
+
+		/* Configure and start transfer */
+		mod->ep_status[0].count  = 0;
+		mod->ep_status[0].size   = len;
+		mod->ep_status[0].data   = data;
 		mod->ep_status[0].flags |= EP_BUSY;
 		mod->ep_status[0].flags |= 2; // Set dir IN
 		ep_transfer_in(mod, 0, 0);
