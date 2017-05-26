@@ -16,6 +16,11 @@
 #ifndef USB_H
 #define USB_H
 
+#define EP_BUSY       1
+#define EP_ZLP        4
+#define EP_DIR_IN  0x80
+#define EP_DIR_OUT 0x00
+
 typedef struct __attribute__((packed))
 {
 	/* Bank 0 */

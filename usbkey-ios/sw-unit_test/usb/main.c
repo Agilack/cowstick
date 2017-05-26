@@ -14,7 +14,9 @@
  * This program is distributed WITHOUT ANY WARRANTY.
  */
 #include "hardware.h"
+#include "libc.h"
 #include "usb.h"
+#include "usb_desc.h"
 
 static void clk_debug(void);
 
@@ -37,6 +39,8 @@ int main(void)
 
 	usb_init();
 
+	memset(&mod, 0, sizeof(usb_module));
+	mod.desc = mouse_desc_array;
 	usb_config(&mod);
 
 	while (1)
