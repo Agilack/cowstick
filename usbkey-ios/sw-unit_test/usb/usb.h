@@ -58,6 +58,7 @@ typedef struct usb_module
 } usb_module;
 
 void usb_config(usb_module *mod);
+void usb_ep_enable(usb_module *mod, u8 ep, u8 mode);
 void usb_init  (void);
 void usb_irq   (usb_module *mod);
 

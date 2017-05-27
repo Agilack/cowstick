@@ -19,7 +19,6 @@
 #include "usb.h"
 
 static void _usb_load_calib(void);
-void usb_ep_enable(u8 ep, u8 mode, usb_module *mod);
 void usb_reset(usb_module *mod);
 static void ep_irq(usb_module *mod, u8 ep);
 static void ep_transfer_in(usb_module *mod, u8 ep, int isr);
@@ -27,9 +26,18 @@ static void ep_transfer_out  (usb_module *mod, u8 ep, int isr);
 static void ep_transfer_setup(usb_module *mod, u8 ep);
 static void std_get_descriptor(usb_module *mod);
 
+/* -------------------------------------------------------------------------- */
+/*                             ***   ****   *****                             */
+/*                            *   *  *   *    *                               */
+/*                            *****  ****     *                               */
+/*                            *   *  *        *                               */
+/*                            *   *  *      *****                             */
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief Initialize and start USB peripheral (device mode)
  *
+ * @param mod Pointer to the USB module configuration
  */
 void usb_config(usb_module *mod)
 {
@@ -37,7 +45,7 @@ void usb_config(usb_module *mod)
 
 	/* Reset bus address value */
 	mod->addr = 0;
-
+	/* Reset endpoint status structures */
 	for (i = 0; i < 8; i++)
 	{
 		mod->ep_status[i].size  = 0;
@@ -88,6 +96,8 @@ void usb_config(usb_module *mod)
 /**
  * @brief Initialize USB peripheral
  *
+ * This function must be called before anything else to configure clocks
+ * and IOs pads.
  */
 void usb_init(void)
 {
@@ -96,8 +106,6 @@ void usb_init(void)
 	reg_set(PM_ADDR + 0x14, (1 << 6)); /* Set AHB clock enable for USB */
 	/* Set and enable GCLK7 for USB */
 	reg16_wr(GCLK_ADDR + 0x02, (1 << 14) | (0x07 << 8) | 0x06);
-
-	/* 3) Configure IOs pins ----------------------- */
 
 	/* PA24 (USB_DM) Set as output */
 	reg_wr (0x60000000 + 0x08, (1 << 24));
@@ -119,6 +127,10 @@ void usb_init(void)
 
 /**
  * @brief Interrupt handler
+ *
+ * This function must be called when an interrupt is received from USB. It
+ * if NOT the target function of cpu vector because we need a pointer to the
+ * usb_module structure.
  *
  * @param mod Pointer to the USB module configuration
  */
@@ -206,7 +218,7 @@ void usb_reset(usb_module *mod)
 
 	mod->addr = 0;
 
-	usb_ep_enable(0, 0x11, mod);
+	usb_ep_enable(mod, 0, 0x11);
 }
 
 /**
@@ -245,7 +257,14 @@ static void _usb_load_calib(void)
 	reg8_wr(USB_ADDR + 0x03, (3 << 0) | (3 << 2));
 }
 
-void usb_ep_enable(u8 ep, u8 mode, usb_module *mod)
+/**
+ * @brief Enable an endpoint
+ *
+ * @param mod  Pointer to the USB module configuration
+ * @param ep   Endpoint number
+ * @param mode Endpoint mode (bulk, isochronous, control) (see 32.8.3.1)
+ */
+void usb_ep_enable(usb_module *mod, u8 ep, u8 mode)
 {
 	reg8_wr(USB_ADDR + 0x100 + (ep * 0x20), mode);
 
@@ -260,7 +279,7 @@ void usb_ep_enable(u8 ep, u8 mode, usb_module *mod)
 	/* Disable bank 1 (clear BK1RDY) */
 	reg8_wr(USB_ADDR + 0x104, (1 << 7));
 
-	/* 2) Setup for first transfer */
+	/* Setup for first transfer */
 
 	mod->ep_desc[ep].b0_addr = (u32)mod->ctrl;
 	mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
@@ -274,6 +293,20 @@ void usb_ep_enable(u8 ep, u8 mode, usb_module *mod)
 	reg8_wr(USB_ADDR + 0x109 + (ep * 20), (1 << 4));
 }
 
+/* -------------------------------------------------------------------------- */
+/*                                *****  ****                                 */
+/*                                *      *   *                                */
+/*                                ***    ****                                 */
+/*                                *      *                                    */
+/*                                *****  *                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Handle an interrupt for a specifid endpoint
+ *
+ * @param mod Pointer to the USB module configuration
+ * @param ep  Endpoint number
+ */
 static void ep_irq(usb_module *mod, u8 ep)
 {
 	u8 flags = reg8_rd(USB_ADDR + 0x107);
@@ -361,6 +394,12 @@ static void ep_irq(usb_module *mod, u8 ep)
 	}
 }
 
+/**
+ * @brief Called when a transfer (IN or OUT) is finished
+ *
+ * @param mod Pointer to the USB module configuration
+ * @param ep  Endpoint number
+ */
 static void ep_transfer_complete(usb_module *mod, u8 ep)
 {
 	int dir;
@@ -469,6 +508,7 @@ static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
  *
  * @param mod Pointer to the USB module configuration
  * @param ep  Endpoint number
+ * @param isr True if the function is called by interrupt
  */
 static void ep_transfer_out(usb_module *mod, u8 ep, int isr)
 {
@@ -585,6 +625,14 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 	}
 }
 
+/* -------------------------------------------------------------------------- */
+/*                              **** ***** ****                               */
+/*                             *       *   *   *                              */
+/*                              ***    *   *   *                              */
+/*                                 *   *   *   *                              */
+/*                             ****    *   ****                               */
+/* -------------------------------------------------------------------------- */
+
 static void std_get_descriptor(usb_module *mod)
 {
 	/* Device Descriptor */
@@ -633,7 +681,7 @@ static void std_get_descriptor(usb_module *mod)
 
 		if (str_index == 0)
 		{
-			data = (mod->desc + 18);
+			data = (mod->desc + 18); // ToDo : Remove dirty fixed offset
 			len  = 4;
 		}
 
