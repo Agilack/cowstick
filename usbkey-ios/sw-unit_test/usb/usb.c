@@ -71,7 +71,9 @@ void usb_config(usb_module *mod)
 	/* Set DETACH bit to avoid early USB connection */
 	reg16_wr(USB_ADDR + 0x08, (0x00 << 2) | 1);
 	
-	/* ToDo: Here, initialize Classes layers */
+	/* Initialize device class layer */
+	if (mod->class && mod->class->init)
+		mod->class->init(mod);
 
 	/* Verify SYNCBUSY */
 	if (reg8_rd(USB_ADDR + 0x02) & 0x03) {
@@ -149,6 +151,9 @@ void usb_irq(usb_module *mod)
 		/* If Start-Of-Frame interrupt is set */
 		if (status & (1 << 2))
 		{
+			/* If the upper layer have a SOF handler, call it */
+			if (mod->class && mod->class->sof)
+				mod->class->sof(mod);
 			/* Ack/clear event */
 			reg16_wr(USB_ADDR + 0x1C, (1 << 2));
 		}
@@ -573,8 +578,6 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 		if ((mod->ctrl[0] == 0x80) && (mod->ctrl[1] == 0x06))
 		{
 			std_get_descriptor(mod);
-			/* Ack/clear the RXSTP interrupt */
-			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
 		}
 		/* SET_ADDRESS */
 		else if ((mod->ctrl[0] == 0x00) && (mod->ctrl[1] == 0x05))
@@ -590,9 +593,6 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 			mod->ep_status[ep].flags |=  EP_ZLP;
 			mod->ep_status[ep].flags |= 0x10; // Debug flag
 			ep_transfer_in(mod, ep, 0);
-
-			/* Ack/clear the RXSTP interrupt */
-			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
 		}
 		/* SET_CONFIGURATION */
 		else if ((mod->ctrl[0] == 0x00) && (mod->ctrl[1] == 0x09))
@@ -604,9 +604,6 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 			mod->ep_status[ep].flags |=  EP_ZLP;
 			mod->ep_status[ep].flags |= 0x20; // Debug flag
 			ep_transfer_in(mod, ep, 0);
-
-			/* Ack/clear the RXSTP interrupt */
-			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
 		}
 		/* SET_INTERFACE */
 		else if ((mod->ctrl[0] == 0x01) && (mod->ctrl[1] == 0x0B))
@@ -618,10 +615,26 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 			mod->ep_status[ep].flags |=  EP_ZLP;
 			mod->ep_status[ep].flags |= 0x20; // Debug flag
 			ep_transfer_in(mod, ep, 0);
-
-			/* Ack/clear the RXSTP interrupt */
-			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
 		}
+		/* INTERFACE */
+		else if (mod->ctrl[0] == 0x81)
+		{
+			/* Configure and start transfer */
+			mod->ep_status[0].count  = 0;
+			mod->ep_status[0].size   = 0x34;
+			mod->ep_status[0].data   = (mod->desc + 56);
+			mod->ep_status[0].flags |= EP_BUSY;
+			mod->ep_status[0].flags |= 2; // Set dir IN
+			ep_transfer_in(mod, ep, 0);
+		}
+		/* Class or Vendor request */
+		else if (mod->ctrl[0] & 0x60)
+		{
+			if (mod->class && mod->class->setup)
+				mod->class->setup(mod);
+		}
+		/* Ack/clear the RXSTP interrupt */
+		reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
 	}
 }
 

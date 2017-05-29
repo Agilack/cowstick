@@ -45,16 +45,26 @@ typedef struct
 	u8  *data;  /* Pointer to the data buffer */
 } ep_status;
 
+struct usb_module;
+
+typedef struct usb_class
+{
+	void (*init) (struct usb_module *mod);
+	void (*setup)(struct usb_module *mod);
+	void (*sof)  (struct usb_module *mod);
+} usb_class;
+
 typedef struct usb_module
 {
 	ep_desc ep_desc[8]; /* Endpoint descriptors (see datasheet 32.8.4.1) */
 	u8      ctrl[64];   /* Buffer for EP0 control */
 	u8      ctrl_in[64];
 	/* After here, unaligned datas */
-	u8        addr;     /* Device address on bus  */
-	ep_status ep_status[8];
-	u8       *desc;     /* Pointer to descriptors */
-	int       desc_len; /* Length of descriptors  */
+	u8         addr;     /* Device address on bus  */
+	ep_status  ep_status[8];
+	u8        *desc;     /* Pointer to descriptors */
+	int        desc_len; /* Length of descriptors  */
+	usb_class *class;
 } usb_module;
 
 void usb_config(usb_module *mod);

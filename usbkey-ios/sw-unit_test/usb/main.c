@@ -19,8 +19,10 @@
 #include "usb_desc.h"
 
 static void clk_debug(void);
+void mouse_setup(usb_module *mod);
 
 usb_module mod;
+usb_class  mouse_class;
 
 /**
  * @brief Entry point and main loop of the unit-test
@@ -30,17 +32,14 @@ int main(void)
 {
 	hw_init();
 
-	/* DIR: Set PA15 as output */
-	reg_wr(0x60000000 + 0x08, (1 << 15));
-	/* Set LED "OFF" */
-	reg_wr(0x60000000 + 0x18, (1 << 15));
-	/* PINCFG: Configure PA15 (normal strength, no pull, no pmux) */
-	reg8_wr(0x60000000 + 0x4F, 0x00);
-
 	usb_init();
 
+	memset(&mouse_class, 0, sizeof(usb_class));
+	mouse_class.setup = mouse_setup;
+
 	memset(&mod, 0, sizeof(usb_module));
-	mod.desc = mouse_desc_array;
+	mod.desc  =  mouse_desc_array;
+	mod.class = &mouse_class;
 	usb_config(&mod);
 
 	while (1)
@@ -68,6 +67,11 @@ static void clk_debug(void)
 	reg8_wr(0x60000000 + 0x3B, v);
 }
 
+void mouse_setup(usb_module *mod)
+{
+	/* Nothing to do :) */
+}
+
 /**
  * @brief USB peripheral interrupt handler
  *
@@ -75,7 +79,5 @@ static void clk_debug(void)
 void USB_Handler(void)
 {
 	usb_irq(&mod);
-	/* Toggle LED value */
-	reg_wr(0x60000000 + 0x1C, (1 << 15));
 }
 /* EOF */
