@@ -271,31 +271,49 @@ static void _usb_load_calib(void)
  */
 void usb_ep_enable(usb_module *mod, u8 ep, u8 mode)
 {
-	reg8_wr(USB_ADDR + 0x100 + (ep * 0x20), mode);
+	u32 ep_addr = (USB_ADDR + 0x100 + (ep << 5));
 
-	mod->ep_desc[ep].b0_pcksize = 0x30100000;
-	mod->ep_desc[ep].b1_pcksize = 0x30000040;
+	/* Configure endpoint mode (EPCFG) */
+	reg8_wr(ep_addr + 0x00, mode);
 
 	mod->ep_status[ep].flags = 0;
 	mod->ep_status[ep].size = 0;
 
-	/* Disable bank 0 (set BK0RDY)   */
-	reg8_wr(USB_ADDR + 0x105, (1 << 6));
-	/* Disable bank 1 (clear BK1RDY) */
-	reg8_wr(USB_ADDR + 0x104, (1 << 7));
+	/* If the OUT channel is used */
+	if (mode & 0x0F)
+	{
+		/* Disable bank 0 (set BK0RDY)   */
+		reg8_wr(ep_addr + 0x05, (1 << 6));
+		/* Set default packet length */
+		mod->ep_desc[ep].b0_pcksize = 0x30100000;
+		/* Clear STALLRQ0 */
+		reg8_wr(ep_addr + 0x04, (1 << 4));
+	}
+	/* If the IN channel is used */
+	if (mode & 0xF0)
+	{
+		/* Disable bank 1 (clear BK1RDY) */
+		reg8_wr(ep_addr + 0x04, (1 << 7));
+		/* Set default packet length */
+		mod->ep_desc[ep].b1_pcksize = 0x30000000;
+		/* Clear STALLRQ1 */
+		reg8_wr(ep_addr + 0x04, (2 << 4));
+	}
 
 	/* Setup for first transfer */
+	if (mode & 0x0F)
+	{
+		mod->ep_desc[ep].b0_addr = (u32)mod->ctrl;
+		mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
+		/* Set BK0 */
+		reg8_wr(ep_addr + 0x05, (1 << 6));
+	}
 
-	mod->ep_desc[ep].b0_addr = (u32)mod->ctrl;
-	mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
-
-	/* Clear EP Status (BK1RDY and STALLRQx) */
-	reg8_wr(USB_ADDR + 0x104 + (ep * 20), (1 << 7) | (0x03 << 4));
-	/* Set BK0 */
-	reg8_wr(USB_ADDR + 0x105 + (ep * 20), (1 << 6));
-
-	/* Enable RXSTP interrupt */
-	reg8_wr(USB_ADDR + 0x109 + (ep * 20), (1 << 4));
+	if (mode == 0x11)
+	{
+		/* Enable RXSTP interrupt */
+		reg8_wr(ep_addr + 0x09, (1 << 4));
+	}
 }
 
 /* -------------------------------------------------------------------------- */
@@ -314,7 +332,8 @@ void usb_ep_enable(usb_module *mod, u8 ep, u8 mode)
  */
 static void ep_irq(usb_module *mod, u8 ep)
 {
-	u8 flags = reg8_rd(USB_ADDR + 0x107);
+	u32 ep_addr = (USB_ADDR + 0x100 + (ep << 5));
+	u8 flags = reg8_rd(ep_addr + 0x07);
 
 	/* If the busy flag is not set */
 	if ((mod->ep_status[ep].flags & EP_BUSY) == 0)
@@ -342,7 +361,7 @@ static void ep_irq(usb_module *mod, u8 ep)
 		if (flags & (1 << 6))
 		{
 			/* Ack/clear event */
-			reg8_wr(USB_ADDR + 0x107, (1 << 6));
+			reg8_wr(ep_addr + 0x07, (1 << 6));
 		}
 		/* If Tranfser Fail on bank 1 (TRFAIL1) */
 		else if (flags & (1 << 3))
@@ -350,9 +369,9 @@ static void ep_irq(usb_module *mod, u8 ep)
 			/* Clear Bank1 status */
 			mod->ep_desc[ep].b1_status_bk = 0;
 			/* Ack/Clear the event into flags */
-			reg8_wr(USB_ADDR + 0x107, (1 << 3));
+			reg8_wr(ep_addr + 0x07, (1 << 3));
 			/* Disable this interrupt */
-			reg8_wr(USB_ADDR + 0x108, (1 << 3));
+			reg8_wr(ep_addr + 0x08, (1 << 3));
 		}
 		/* If Transfer Complete on bank 1 (TRCPT1) */
 		else if (flags & (1 << 1))
@@ -361,12 +380,12 @@ static void ep_irq(usb_module *mod, u8 ep)
 			ep_transfer_in(mod, ep, 1);
 
 			//if (ctrl)
-			//reg8_wr(USB_ADDR + 0x108, 0x4A | 0x01);
+			//reg8_wr(ep_addr + 0x08, 0x4A | 0x01);
 			//else
-			//reg8_wr(USB_ADDR + 0x108, 0x4A);
+			//reg8_wr(ep_addr + 0x08, 0x4A);
 
 			/* Ack/clear the TRCPT interrupt */
-			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1 << 1));
+			reg8_wr(ep_addr + 0x07, (1 << 1));
 		}
 	}
 	/* Else, OUT */
@@ -376,7 +395,7 @@ static void ep_irq(usb_module *mod, u8 ep)
 		if (flags & (1 << 5))
 		{
 			/* Ack/clear the TRCPT interrupt */
-			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1 << 5));
+			reg8_wr(ep_addr + 0x07, (1 << 5));
 		}
 		/* If Transfer Complete on bank 0 (TRCPT0) */
 		if (flags & (1 << 0))
@@ -384,7 +403,7 @@ static void ep_irq(usb_module *mod, u8 ep)
 			/* Get next data packet (if any) */
 			ep_transfer_out(mod, ep, 1);
 			/* Ack/clear the TRCPT interrupt */
-			reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1 << 0));
+			reg8_wr(ep_addr + 0x07, (1 << 0));
 		}
 		/* If a Tranfer Fail has been detected (TRFAIL0) */
 		else if (flags & (1 << 2))
@@ -392,9 +411,9 @@ static void ep_irq(usb_module *mod, u8 ep)
 			/* Clear Bank0 status */
 			mod->ep_desc[ep].b0_status_bk = 0;
 			/* Disable this interrupt */
-			reg8_wr(USB_ADDR + 0x108, (1 << 2));
+			reg8_wr(ep_addr + 0x08, (1 << 2));
 			/* Ack/Clear the event into flags */
-			reg8_wr(USB_ADDR + 0x107, (1 << 2));
+			reg8_wr(ep_addr + 0x07, (1 << 2));
 		}
 	}
 }
@@ -447,6 +466,7 @@ static void ep_transfer_complete(usb_module *mod, u8 ep)
  */
 static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 {
+	u32 ep_addr = (USB_ADDR + 0x100 + (ep << 5));
 	int len   = 0;
 	int count = 0;
 
@@ -478,10 +498,10 @@ static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 		mod->ep_desc[ep].b1_pcksize = 0x30000000 | len;
 
 		/* Set All interrupts */
-		reg8_wr(USB_ADDR + 0x109, 0x4A);
+		reg8_wr(ep_addr + 0x09, 0x4A);
 
 		/* Set BK1RDY */
-		reg8_wr(USB_ADDR + 0x105, (1 << 7));
+		reg8_wr(ep_addr + 0x05, (1 << 7));
 	}
 	/* Zero Length Packet */
 	else if (mod->ep_status[ep].flags & EP_ZLP)
@@ -494,15 +514,15 @@ static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 		mod->ep_desc[ep].b1_pcksize = 0x30000000;
 
 		/* Set All interrupts */
-		reg8_wr(USB_ADDR + 0x109, 0x4A);
+		reg8_wr(ep_addr + 0x09, 0x4A);
 
 		/* Set BK1RDY */
-		reg8_wr(USB_ADDR + 0x105, (1 << 7));
+		reg8_wr(ep_addr + 0x05, (1 << 7));
 	}
 	else
 	{
 		/* Disable all Bank1 interrupts */
-		reg8_wr(USB_ADDR + 0x108, 0x4A);
+		reg8_wr(ep_addr + 0x08, 0x4A);
 
 		ep_transfer_complete(mod, ep);
 	}
@@ -517,6 +537,7 @@ static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
  */
 static void ep_transfer_out(usb_module *mod, u8 ep, int isr)
 {
+	u32 ep_addr = (USB_ADDR + 0x100 + (ep << 5));
 	int len = mod->ep_status[ep].size;
 
 	if (isr)
@@ -528,9 +549,9 @@ static void ep_transfer_out(usb_module *mod, u8 ep, int isr)
 		/* Set buffer length : 0 (ZLP) */
 		mod->ep_desc[ep].b0_pcksize = pcksize;
 		/* Set All Bank0 interrupts */
-		reg8_wr(USB_ADDR + 0x109, 0x35);
+		reg8_wr(ep_addr + 0x09, 0x35);
 		/* Clear BK0RDY */
-		reg8_wr(USB_ADDR + 0x104, (1 << 6));
+		reg8_wr(ep_addr + 0x04, (1 << 6));
 	}
 	else if (mod->ep_status[ep].flags & EP_ZLP)
 	{
@@ -538,15 +559,15 @@ static void ep_transfer_out(usb_module *mod, u8 ep, int isr)
 		/* Set buffer length : 0 (ZLP) */
 		mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14);
 		/* Set All Bank0 interrupts */
-		reg8_wr(USB_ADDR + 0x109, 0x35);
+		reg8_wr(ep_addr + 0x09, 0x35);
 		/* Clear BK0RDY */
-		reg8_wr(USB_ADDR + 0x104, (1 << 6));
+		reg8_wr(ep_addr + 0x04, (1 << 6));
 		mod->ep_status[ep].flags &= ~EP_BUSY;
 	}
 	else
 	{
 		/* Disable all Bank0 interrupts */
-		reg8_wr(USB_ADDR + 0x108, 0x35);
+		reg8_wr(ep_addr + 0x08, 0x35);
 
 		ep_transfer_complete(mod, ep);
 	}
@@ -560,16 +581,17 @@ static void ep_transfer_out(usb_module *mod, u8 ep, int isr)
  */
 static void ep_transfer_setup(usb_module *mod, u8 ep)
 {
-	int i;
+	u32 ep_addr = (USB_ADDR + 0x100 + (ep << 5));
 	u16 bytes = (mod->ep_desc[ep].b0_pcksize & 0x3FF);
+	int i;
 
 	/* Clear bank status */
 	mod->ep_desc[ep].b0_status_bk = 0;
 	mod->ep_desc[ep].b1_status_bk = 0;
 	/* Ack event (all bank 0 and all bank 1) */
-	reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), 0x4A | 0x25);
+	reg8_wr(ep_addr + 0x07, 0x4A | 0x25);
 	/* Disable transfer interrupts (all bank 0 and all bank 1) */
-	reg8_wr(USB_ADDR + 0x108 + (ep * 0x20), 0x4A | 0x25);
+	reg8_wr(ep_addr + 0x08, 0x4A | 0x25);
 
 	/* Callback */
 	if (bytes > 0)
@@ -604,6 +626,10 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 			mod->ep_status[ep].flags |=  EP_ZLP;
 			mod->ep_status[ep].flags |= 0x20; // Debug flag
 			ep_transfer_in(mod, ep, 0);
+
+			/* If an Enable callback function exists, call it */
+			if (mod->class && mod->class->enable)
+				mod->class->enable(mod);
 		}
 		/* SET_INTERFACE */
 		else if ((mod->ctrl[0] == 0x01) && (mod->ctrl[1] == 0x0B))
@@ -634,7 +660,7 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 				mod->class->setup(mod);
 		}
 		/* Ack/clear the RXSTP interrupt */
-		reg8_wr(USB_ADDR + 0x107 + (ep * 0x20), (1<< 4));
+		reg8_wr(ep_addr + 0x07, (1<< 4));
 	}
 }
 

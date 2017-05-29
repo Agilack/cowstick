@@ -49,9 +49,10 @@ struct usb_module;
 
 typedef struct usb_class
 {
-	void (*init) (struct usb_module *mod);
-	void (*setup)(struct usb_module *mod);
-	void (*sof)  (struct usb_module *mod);
+	void (*enable)(struct usb_module *mod);
+	void (*init)  (struct usb_module *mod);
+	void (*setup) (struct usb_module *mod);
+	void (*sof)   (struct usb_module *mod);
 } usb_class;
 
 typedef struct usb_module

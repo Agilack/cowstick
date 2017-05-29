@@ -19,7 +19,8 @@
 #include "usb_desc.h"
 
 static void clk_debug(void);
-void mouse_setup(usb_module *mod);
+void mouse_enable(usb_module *mod);
+void mouse_setup (usb_module *mod);
 
 usb_module mod;
 usb_class  mouse_class;
@@ -35,7 +36,8 @@ int main(void)
 	usb_init();
 
 	memset(&mouse_class, 0, sizeof(usb_class));
-	mouse_class.setup = mouse_setup;
+	mouse_class.enable = mouse_enable;
+	mouse_class.setup  = mouse_setup;
 
 	memset(&mod, 0, sizeof(usb_module));
 	mod.desc  =  mouse_desc_array;
@@ -65,6 +67,12 @@ static void clk_debug(void)
 	v &= 0x0F;
 	v |= (0x07 << 4);
 	reg8_wr(0x60000000 + 0x3B, v);
+}
+
+void mouse_enable(usb_module *mod)
+{
+	/* Enable endpoint 1 for datas */
+	usb_ep_enable(mod, 1, 0x40);
 }
 
 void mouse_setup(usb_module *mod)
