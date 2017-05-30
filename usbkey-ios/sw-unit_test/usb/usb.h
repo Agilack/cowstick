@@ -53,6 +53,7 @@ typedef struct usb_class
 	void (*init)  (struct usb_module *mod);
 	void (*setup) (struct usb_module *mod);
 	void (*sof)   (struct usb_module *mod);
+	void (*xfer)  (struct usb_module *mod, u8 ep);
 } usb_class;
 
 typedef struct usb_module
@@ -68,9 +69,9 @@ typedef struct usb_module
 	usb_class *class;
 } usb_module;
 
-void usb_config(usb_module *mod);
+void usb_config   (usb_module *mod);
 void usb_ep_enable(usb_module *mod, u8 ep, u8 mode);
-void usb_init  (void);
-void usb_irq   (usb_module *mod);
-
+void usb_init     (void);
+void usb_irq      (usb_module *mod);
+void usb_transfer (usb_module *mod, u8 ep, u8* data, int len);
 #endif

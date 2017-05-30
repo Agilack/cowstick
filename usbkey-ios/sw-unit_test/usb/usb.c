@@ -197,7 +197,15 @@ void usb_irq(usb_module *mod)
 	}
 	else if (epint)
 	{
-		ep_irq(mod, 0);
+		int mask = 1;
+		int i;
+
+		for (i = 0; i < 8; i++)
+		{
+			if (epint & mask)
+				ep_irq(mod, i);
+			mask <<= 1;
+		}
 	}
 }
 
@@ -224,6 +232,33 @@ void usb_reset(usb_module *mod)
 	mod->addr = 0;
 
 	usb_ep_enable(mod, 0, 0x11);
+}
+
+void usb_transfer(usb_module *mod, u8 ep, u8* data, int len)
+{
+	int dir = (ep & 0x80);
+
+	/* Clear the direction bit into endpoint id */
+	ep &= 0x7F;
+
+	// ToDo Test if endpoint ID is less or equal than max value
+
+	mod->ep_status[ep].count  = 0;
+	mod->ep_status[ep].size   = len;
+	mod->ep_status[ep].data   = data;
+	mod->ep_status[ep].flags |= EP_BUSY;
+	mod->ep_status[ep].flags |= 0x20;
+
+	if (len == 0)
+		mod->ep_status[ep].flags |= EP_ZLP;
+
+	if (dir)
+	{
+		mod->ep_status[ep].flags |= 2; // Set dir IN
+		ep_transfer_in(mod, ep, 0);
+	}
+	else
+		ep_transfer_out(mod, ep, 0);
 }
 
 /**
@@ -344,15 +379,18 @@ static void ep_irq(usb_module *mod, u8 ep)
 			ep_transfer_setup(mod, 0);
 		/* If STALL1 bit is set */
 		else if (flags & (1 << 6))
-		{
-			// ToDo
-		}
+			// ToDo : do something with this event ?
+			reg8_wr(ep_addr + 0x07, (1 << 6));
 		/* If STALL0 bit is set */
 		else if (flags & (1 << 5))
-		{
-			// ToDo
-		}
-
+			// ToDo : do something with this event ?
+			reg8_wr(ep_addr + 0x07, (1 << 5));
+		/* If Transfer Complete flag is set (TRCPT0) */
+		else if (flags & (1 << 0))
+			reg8_wr(ep_addr + 0x07, (1 << 0));
+		/* If Transfer Fail flag is set (TRFAIL0) */
+		else if (flags & (1 << 2))
+			reg8_wr(ep_addr + 0x07, (1 << 2));
 	}
 	/* If the DIR flag is set : IN */
 	else if (mod->ep_status[ep].flags & 2)
@@ -455,6 +493,13 @@ static void ep_transfer_complete(usb_module *mod, u8 ep)
 			ep_transfer_out(mod, ep, 0);
 		}
 	}
+
+	if (ep > 0)
+	{
+		if (mod->class && mod->class->xfer)
+			mod->class->xfer(mod, ep);
+	}
+
 }
 
 /**
@@ -489,11 +534,16 @@ static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 		u8 *buffer = mod->ep_status[ep].data;
 		buffer += mod->ep_status[ep].count;
 
-		/* Copy data into EP cache */
-		memcpy(mod->ctrl_in, buffer, len);
-
-		/* Set buffer address */
-		mod->ep_desc[ep].b1_addr = (u32)&mod->ctrl_in;
+		if (ep == 0)
+		{
+			/* Copy data into EP cache */
+			memcpy(mod->ctrl_in, buffer, len);
+			/* Set buffer address */
+			mod->ep_desc[ep].b1_addr = (u32)&mod->ctrl_in;
+		}
+		else
+			/* Set buffer address */
+			mod->ep_desc[ep].b1_addr = (u32)buffer;
 		/* Set buffer length */
 		mod->ep_desc[ep].b1_pcksize = 0x30000000 | len;
 
