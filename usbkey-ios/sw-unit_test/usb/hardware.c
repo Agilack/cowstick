@@ -41,6 +41,7 @@ void hw_init(void)
  */
 static inline void hw_init_clock(void)
 {
+	u32 dfll_coarse, dfll_cfg;
 	u32 v;
 
 	/* Configure internal 8MHz oscillator */
@@ -86,9 +87,12 @@ static inline void hw_init_clock(void)
 	/* Configure DFLL multiplier (DFLLMUL) */
 	reg_wr(SYSCTRL_ADDR + 0x2c, (1 << 20) | (1 << 16) | 0xBB80);
 	/* Set DFLL cabration value */
-	reg_wr(SYSCTRL_ADDR + 0x28, (0x0000 << 16) | (0x21 << 10) | 512);
+	dfll_coarse = (*(u32 *)0x00806024 >> 26) & 0x3F;
+	reg_wr(SYSCTRL_ADDR + 0x28, (0x0000 << 16) | (dfll_coarse << 10) | 512);
 	/* Configure DFLL */
-	reg16_wr(SYSCTRL_ADDR + 0x24, (1<<10)|(1<<8)|(1<<5)|(1<<2)|(1<<1));
+	//dfll_cfg = (1<<10)|(1<<8)|(1<<5)|(1<<2)|(1<<1);
+	dfll_cfg = (1<<10)|(1<<8)|(1<<5)|(1<<1);
+	reg16_wr(SYSCTRL_ADDR + 0x24, dfll_cfg);
 
 	/* Wait depending on DFLL mode (closed or open loop) */
 	if (reg_rd(SYSCTRL_ADDR + 0x24) & 0x04)

@@ -17,8 +17,6 @@
 #define HARDWARE_H
 #include "types.h"
 
-#define XPLAINED 1
-
 /* AHB-APB Bridge A */
 #define PAC0_ADDR    ((u32)0x40000000)
 #define PM_ADDR      ((u32)0x40000400)
