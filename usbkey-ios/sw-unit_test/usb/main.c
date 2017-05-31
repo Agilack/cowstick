@@ -51,7 +51,8 @@ int main(void)
 	mouse_class.xfer   = mouse_xfer;
 
 	memset(&mod, 0, sizeof(usb_module));
-	mod.desc  =  mouse_desc_array;
+	mod.desc       = mouse_desc_array;
+	mod.desc_iface = mouse_desc_iface;
 	mod.class = &mouse_class;
 	usb_config(&mod);
 
