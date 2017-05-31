@@ -96,6 +96,54 @@ void usb_config(usb_module *mod)
 }
 
 /**
+ * @brief Find a specific descriptor into the descriptors arrays
+ *
+ * @param mod   Pointer to the USB module configuration
+ * @param rtype Request type (standard, interface, class, ...)
+ * @param type  Descriptor type into a specifi rtype
+ * @param index Index of the requested descriptor (if multiple of same type)
+ * @param size  Optional pointer to an integer to get the descriptor size
+ */
+u8 *usb_find_desc(usb_module *mod, u8 rtype, u8 type, u8 index, int *size)
+{
+	u8 *ptr;
+
+	/* Sanity check */
+	if ((mod == 0) || (mod->desc == 0))
+		return 0;
+
+	/* Search from the begining of the descriptor index */
+	if (rtype == 0)
+		ptr = mod->desc;
+	else if (rtype == 1)
+		ptr = mod->desc_iface;
+
+	while(*ptr)
+	{
+		if (ptr[1] != type)
+		{
+			/* Move to the next descriptor (add current desc size) */
+			ptr += ptr[0];
+			continue;
+		}
+		if (index > 0)
+		{
+			index --;
+			/* Move to the dext descriptor (add current desc size) */
+			ptr += ptr[0];
+			continue;
+		}
+		break;
+	}
+	/* If the "size" parameter is used */
+	if (size)
+		/* Copy the descriptor length */
+		*size = ptr[0];
+
+	return ptr;
+}
+
+/**
  * @brief Initialize USB peripheral
  *
  * This function must be called before anything else to configure clocks
@@ -695,10 +743,18 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 		/* INTERFACE */
 		else if (mod->ctrl[0] == 0x81)
 		{
+			u8 *data;
+			u8  type  = mod->ctrl[3];
+			u8  index = mod->ctrl[2];
+			int len;
+
+			data = usb_find_desc(mod, 0x01, type, index, &len);
+			data += 2; /* Ignore len+type header */
+
 			/* Configure and start transfer */
 			mod->ep_status[0].count  = 0;
-			mod->ep_status[0].size   = 0x34;
-			mod->ep_status[0].data   = (mod->desc + 56);
+			mod->ep_status[0].size   = len;
+			mod->ep_status[0].data   = data;
 			mod->ep_status[0].flags |= EP_BUSY;
 			mod->ep_status[0].flags |= 2; // Set dir IN
 			ep_transfer_in(mod, ep, 0);
@@ -743,7 +799,8 @@ static void std_get_descriptor(usb_module *mod)
 		int clen;
 		int i;
 
-		data = (mod->desc + 22); // ToDo : Remove dirty fixed offset
+		/* Search the configuration into standard descriptors */
+		data = usb_find_desc(mod, 0x00, 0x02, 0, &i);
 		wLength = ((mod->ctrl[7] << 8) | mod->ctrl[6]);
 
 		if (wLength <= 64)
@@ -768,11 +825,8 @@ static void std_get_descriptor(usb_module *mod)
 		u8 *data;
 		int len = 0;
 
-		if (str_index == 0)
-		{
-			data = (mod->desc + 18); // ToDo : Remove dirty fixed offset
-			len  = 4;
-		}
+		/* Search the string into standard descriptors */
+		data = usb_find_desc(mod, 0x00, 0x03, str_index, &len);
 
 		/* Configure and start transfer */
 		mod->ep_status[0].count  = 0;

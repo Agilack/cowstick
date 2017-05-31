@@ -64,13 +64,14 @@ typedef struct usb_module
 	/* After here, unaligned datas */
 	u8         addr;     /* Device address on bus  */
 	ep_status  ep_status[8];
-	u8        *desc;     /* Pointer to descriptors */
-	int        desc_len; /* Length of descriptors  */
+	u8        *desc;       /* Pointer to descriptors */
+	u8        *desc_iface; /* Pointer to interface descriptors */
 	usb_class *class;
 } usb_module;
 
 void usb_config   (usb_module *mod);
 void usb_ep_enable(usb_module *mod, u8 ep, u8 mode);
+u8  *usb_find_desc(usb_module *mod, u8 rtype, u8 type, u8 index, int *size);
 void usb_init     (void);
 void usb_irq      (usb_module *mod);
 void usb_transfer (usb_module *mod, u8 ep, u8* data, int len);
