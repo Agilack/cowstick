@@ -86,12 +86,15 @@ static inline void hw_init_clock(void)
 		;
 	/* Configure DFLL multiplier (DFLLMUL) */
 	reg_wr(SYSCTRL_ADDR + 0x2c, (1 << 20) | (1 << 16) | 0xBB80);
-	/* Set DFLL cabration value */
+	/* Set DFLL coarse calibration value */
 	dfll_coarse = (*(u32 *)0x00806024 >> 26) & 0x3F;
 	reg_wr(SYSCTRL_ADDR + 0x28, (0x0000 << 16) | (dfll_coarse << 10) | 512);
 	/* Configure DFLL */
-	//dfll_cfg = (1<<10)|(1<<8)|(1<<5)|(1<<2)|(1<<1);
-	dfll_cfg = (1<<10)|(1<<8)|(1<<5)|(1<<1);
+	dfll_cfg = (1 << 10)  /* Bypass Coarse Lock      */
+	         | (1 <<  9)  /* Quick Lock Disable      */
+	         | (1 <<  5)  /* USB Clock Recovery Mode */
+	         | (1 <<  2)  /* Mode: closed-loop       */
+	         | (1 <<  1); /* Enable DFLL             */
 	reg16_wr(SYSCTRL_ADDR + 0x24, dfll_cfg);
 
 	/* Wait depending on DFLL mode (closed or open loop) */
