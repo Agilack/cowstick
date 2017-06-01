@@ -284,7 +284,7 @@ void usb_reset(usb_module *mod)
 
 void usb_transfer(usb_module *mod, u8 ep, u8* data, int len)
 {
-	int dir = (ep & 0x80);
+	int dir = (ep & EP_DIR_IN);
 
 	/* Clear the direction bit into endpoint id */
 	ep &= 0x7F;
@@ -295,14 +295,13 @@ void usb_transfer(usb_module *mod, u8 ep, u8* data, int len)
 	mod->ep_status[ep].size   = len;
 	mod->ep_status[ep].data   = data;
 	mod->ep_status[ep].flags |= EP_BUSY;
-	mod->ep_status[ep].flags |= 0x20;
 
 	if (len == 0)
 		mod->ep_status[ep].flags |= EP_ZLP;
 
 	if (dir)
 	{
-		mod->ep_status[ep].flags |= 2; // Set dir IN
+		mod->ep_status[ep].flags |= EP_DIR_IN;
 		ep_transfer_in(mod, ep, 0);
 	}
 	else
@@ -441,7 +440,7 @@ static void ep_irq(usb_module *mod, u8 ep)
 			reg8_wr(ep_addr + 0x07, (1 << 2));
 	}
 	/* If the DIR flag is set : IN */
-	else if (mod->ep_status[ep].flags & 2)
+	else if (mod->ep_status[ep].flags & EP_DIR_IN)
 	{
 		/* If Tranfser Stall on bank 1 (TRSTALL1) */
 		if (flags & (1 << 6))
@@ -514,40 +513,37 @@ static void ep_transfer_complete(usb_module *mod, u8 ep)
 {
 	int dir;
 
-	dir = (mod->ep_status[ep].flags & 0x02);
+	dir = (mod->ep_status[ep].flags & EP_DIR_IN);
 
-	mod->ep_status[ep].flags &= ~(0x02 | EP_ZLP | EP_BUSY);
-
-	if (mod->ep_status[ep].flags & 0x10)
-	{
-		mod->ep_status[ep].flags &= ~0x10;
-		if (mod->addr != 0)
-			/* Set device address */
-			reg8_wr(USB_ADDR + 0x0A, (1 << 7) | mod->addr);
-	}
-	else if (mod->ep_status[ep].flags & 0x20)
-	{
-		mod->ep_status[ep].flags &= ~0x20;
-	}
-	else
-	{
-		if (dir)
-		{
-			mod->ep_status[ep].flags |=  EP_BUSY;
-			mod->ep_status[ep].flags &=  ~2;
-			mod->ep_status[ep].flags |=  EP_ZLP;
-			mod->ep_status[ep].size  = 0;
-			mod->ep_status[ep].count = 0;
-			ep_transfer_out(mod, ep, 0);
-		}
-	}
+	/* Clear endpoint transfer flags */
+	mod->ep_status[ep].flags &= ~(EP_DIR_IN | EP_ZLP | EP_BUSY);
 
 	if (ep > 0)
 	{
 		if (mod->class && mod->class->xfer)
 			mod->class->xfer(mod, ep);
 	}
-
+	/* Else, it is EP0, process end of control transfer */
+	else
+	{
+		if (mod->ep_status[ep].flags & EP_ADDR)
+		{
+			mod->ep_status[ep].flags &= ~EP_ADDR;
+			if (mod->addr != 0)
+				/* Set device address */
+				reg8_wr(USB_ADDR + 0x0A, (1 << 7) | mod->addr);
+		}
+		/* If three conditions are met :
+		 *   - It is a control transfer (here, EP0)
+		 *   - It is a read operation (dir = IN)
+		 *   - A non-null data phase is complete
+		 */
+		else if ((dir == EP_DIR_IN) && (mod->ep_status[ep].size > 0))
+		{
+			/* Initiate an OUT transfer for Status phase */
+			usb_transfer(mod, 0, 0, 0);
+		}
+	}
 }
 
 /**
@@ -564,7 +560,7 @@ static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 	int count = 0;
 
 	if (isr)
-		count = mod->ep_desc[ep].b1_pcksize;
+		count = (mod->ep_desc[ep].b1_pcksize & 0x3FF);
 
 	// ToDO : ACK TRCPT0 if called by ISR
 
@@ -704,26 +700,15 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 		{
 			/* Save device address */
 			mod->addr = mod->ctrl[2];
-
-			memset(mod->ctrl_in, 0, 64);
-			mod->ep_status[ep].count  = 0;
-			mod->ep_status[ep].size = 0x00;
-			mod->ep_status[ep].flags |=  EP_BUSY;
-			mod->ep_status[ep].flags |=  2;   // Set dir IN
-			mod->ep_status[ep].flags |=  EP_ZLP;
-			mod->ep_status[ep].flags |= 0x10; // Debug flag
-			ep_transfer_in(mod, ep, 0);
+			/* Set ADDR flag, then send Status */
+			mod->ep_status[ep].flags |= EP_ADDR;
+			usb_transfer(mod, EP_DIR_IN | ep, 0, 0);
 		}
 		/* SET_CONFIGURATION */
 		else if ((mod->ctrl[0] == 0x00) && (mod->ctrl[1] == 0x09))
 		{
-			mod->ep_status[ep].count  = 0;
-			mod->ep_status[ep].size   = 0x00;
-			mod->ep_status[ep].flags |=  EP_BUSY;
-			mod->ep_status[ep].flags |=  2; // Set dir IN
-			mod->ep_status[ep].flags |=  EP_ZLP;
-			mod->ep_status[ep].flags |= 0x20; // Debug flag
-			ep_transfer_in(mod, ep, 0);
+			/* Send ZLP for Status phase */
+			usb_transfer(mod, EP_DIR_IN | ep, 0, 0);
 
 			/* If an Enable callback function exists, call it */
 			if (mod->class && mod->class->enable)
@@ -732,13 +717,8 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 		/* SET_INTERFACE */
 		else if ((mod->ctrl[0] == 0x01) && (mod->ctrl[1] == 0x0B))
 		{
-			mod->ep_status[ep].count  = 0;
-			mod->ep_status[ep].size   = 0x00;
-			mod->ep_status[ep].flags |=  EP_BUSY;
-			mod->ep_status[ep].flags |=  2; // Set dir IN
-			mod->ep_status[ep].flags |=  EP_ZLP;
-			mod->ep_status[ep].flags |= 0x20; // Debug flag
-			ep_transfer_in(mod, ep, 0);
+			/* Send ZLP for status phase */
+			usb_transfer(mod, EP_DIR_IN | ep, 0, 0);
 		}
 		/* INTERFACE */
 		else if (mod->ctrl[0] == 0x81)
@@ -751,13 +731,8 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 			data = usb_find_desc(mod, 0x01, type, index, &len);
 			data += 2; /* Ignore len+type header */
 
-			/* Configure and start transfer */
-			mod->ep_status[0].count  = 0;
-			mod->ep_status[0].size   = len;
-			mod->ep_status[0].data   = data;
-			mod->ep_status[0].flags |= EP_BUSY;
-			mod->ep_status[0].flags |= 2; // Set dir IN
-			ep_transfer_in(mod, ep, 0);
+			/* Send descriptor content (data phase) */
+			usb_transfer(mod, EP_DIR_IN | ep, data, len);
 		}
 		/* Class or Vendor request */
 		else if (mod->ctrl[0] & 0x60)
@@ -783,13 +758,8 @@ static void std_get_descriptor(usb_module *mod)
 	/* Device Descriptor */
 	if (mod->ctrl[3] == 1)
 	{
-		/* Configure and start transfer */
-		mod->ep_status[0].count  = 0;
-		mod->ep_status[0].size   = 0x12;
-		mod->ep_status[0].data   = mod->desc;
-		mod->ep_status[0].flags |= EP_BUSY;
-		mod->ep_status[0].flags |= 2; // Set dir IN
-		ep_transfer_in(mod, 0, 0);
+		/* Send descriptor content (data phase) */
+		usb_transfer(mod, EP_DIR_IN | 0, mod->desc, 0x12);
 	}
 	/* Configuration descriptor */
 	else if (mod->ctrl[3] == 2)
@@ -810,13 +780,8 @@ static void std_get_descriptor(usb_module *mod)
 
 		/* Copy descriptor into ep buffer */
 		memcpy(mod->ctrl_in, data, clen);
-		/* Configure and start transfer */
-		mod->ep_status[0].count  = 0;
-		mod->ep_status[0].size   = wLength;
-		mod->ep_status[0].data   = data;
-		mod->ep_status[0].flags |= EP_BUSY;
-		mod->ep_status[0].flags |= 2; // Set dir IN
-		ep_transfer_in(mod, 0, 0);
+		/* Send descriptor content (data phase) */
+		usb_transfer(mod, EP_DIR_IN | 0, data, wLength);
 	}
 	/* String Descriptor */
 	else if (mod->ctrl[3] == 3)
@@ -827,14 +792,8 @@ static void std_get_descriptor(usb_module *mod)
 
 		/* Search the string into standard descriptors */
 		data = usb_find_desc(mod, 0x00, 0x03, str_index, &len);
-
-		/* Configure and start transfer */
-		mod->ep_status[0].count  = 0;
-		mod->ep_status[0].size   = len;
-		mod->ep_status[0].data   = data;
-		mod->ep_status[0].flags |= EP_BUSY;
-		mod->ep_status[0].flags |= 2; // Set dir IN
-		ep_transfer_in(mod, 0, 0);
+		/* Send descriptor content (data phase) */
+		usb_transfer(mod, EP_DIR_IN | 0, data, len);
 	}
 }
 

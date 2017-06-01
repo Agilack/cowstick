@@ -18,6 +18,7 @@
 
 #define EP_BUSY       1
 #define EP_ZLP        4
+#define EP_ADDR    0x10
 #define EP_DIR_IN  0x80
 #define EP_DIR_OUT 0x00
 
