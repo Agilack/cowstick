@@ -18,7 +18,9 @@
 #include "usb.h"
 #include "usb_desc.h"
 
+#ifdef DEBUG
 static void clk_debug(void);
+#endif
 static void wait(u32 cycles);
 void mouse_enable(usb_module *mod);
 void mouse_setup (usb_module *mod);
@@ -41,15 +43,20 @@ int main(void)
 
 	ready = 0;
 
+	/* Initialize low-level hardware*/
 	hw_init();
-
+#ifdef DEBUG
+	clk_debug();
+#endif
+	/* Initialize USB stack */
 	usb_init();
 
+	/* Configure callback functions for USB class */
 	memset(&mouse_class, 0, sizeof(usb_class));
 	mouse_class.enable = mouse_enable;
 	mouse_class.setup  = mouse_setup;
 	mouse_class.xfer   = mouse_xfer;
-
+	/* Configure USB device (and attach it) */
 	memset(&mod, 0, sizeof(usb_module));
 	mod.desc       = mouse_desc_array;
 	mod.desc_iface = mouse_desc_iface;
@@ -114,6 +121,7 @@ int main(void)
 	}
 }
 
+#ifdef DEBUG
 /**
  * @brief Connect 48MHz DFLL to test-pin
  *
@@ -134,7 +142,17 @@ static void clk_debug(void)
 	v |= (0x07 << 4);
 	reg8_wr(0x60000000 + 0x3B, v);
 }
+#endif
 
+/**
+ * @brief Called by USB when the device is enabled
+ *
+ * The device is enabled when a configuration is selected by the remote host
+ * (using SET CONFIGURATION). This function is called under USB interrupt and
+ * must be as small as possible.
+ *
+ * @param mod Pointer to the USB module configuration
+ */
 void mouse_enable(usb_module *mod)
 {
 	/* Enable endpoint 1 for datas */
@@ -143,11 +161,22 @@ void mouse_enable(usb_module *mod)
 	ready = 1;
 }
 
+/**
+ * @brief Called by USB when a request for "class" is received on EP0
+ *
+ * @param mod Pointer to the USB module configuration
+ */
 void mouse_setup(usb_module *mod)
 {
 	usb_transfer(mod, 0x80, 0, 0);
 }
 
+/**
+ * @brief Called by USB at the end of a transfer (all endpoints excepts EP0)
+ *
+ * @param mod Pointer to the USB module configuration
+ * @param ep  Endpoint number
+ */
 void mouse_xfer(usb_module *mod, u8 ep)
 {
 	ready = 1;
