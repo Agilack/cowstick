@@ -24,6 +24,9 @@ int main(void)
 	/* Initialize low-level hardware*/
 	hw_init();
 	
+	/* Heartbeat test */
+	led_status(0x00020006);
+
 	/* Infinite loop, do nothing */
 	while(1)
 		;

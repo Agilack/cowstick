@@ -25,8 +25,11 @@
 /* AHB-APB Bridge B */
 #define NVM_ADDR     ((u32)0x41004000)
 #define USB_ADDR     ((u32)0x41005000)
+/* Bridge C */
+#define TCC0_ADDR    ((u32)0x42002000)
 
 void hw_init(void);
+void led_status(u32 mode);
 
 /**
  * @brief Read the value of a 32bits memory mapped register

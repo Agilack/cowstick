@@ -24,5 +24,5 @@ api_global: /* Offset 0xC0 */
 	.long 0x12345678
 	.long 0
 	.long 0
-	.long 0
+	.long led_status
 
