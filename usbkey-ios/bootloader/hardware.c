@@ -15,6 +15,7 @@
  */
 #include "hardware.h"
 
+static inline void hw_init_button(void);
 static inline void hw_init_clock(void);
 static inline void hw_init_leds(void);
 
@@ -35,7 +36,35 @@ void hw_init(void)
 	
 	hw_init_clock();
 
+	hw_init_button();
 	hw_init_leds();
+}
+
+/**
+ * @brief Initialize io for pushbutton
+ *
+ */
+static inline void hw_init_button(void)
+{
+#ifdef XPLAINED
+	/* DIR : set PA15 as input */
+	reg_wr (0x60000000 + 0x04, (1 << 15));
+	/* Configure pull-up (set data out to '1') */
+	reg_wr (0x60000000 + 0x18, (1 << 15));
+	/* PINCFG : enable input driver and activate pull resistor */
+	reg8_wr(0x60000000 + 0x4F, (1 << 2) | (1 << 1));
+	/* Enable input sampling */
+	reg_set(0x60000000 + 0x24, (1 << 15));
+#else
+	/* DIR : set PA02 as input */
+	reg_wr (0x60000000 + 0x04, (1 << 2));
+	/* Configure pull-up (set data out to '1') */
+	reg_wr (0x60000000 + 0x18, (1 << 2));
+	/* PINCFG : enable input driver and activate pull resistor */
+	reg8_wr(0x60000000 + 0x42, (1 << 2) | (1 << 1));
+	/* Enable input sampling */
+	reg_set(0x60000000 + 0x24, (1 << 2));
+#endif
 }
 
 /**
@@ -146,6 +175,26 @@ static inline void hw_init_leds(void)
 	led_status(0);
 	/* Enable TCC0 */
 	reg_wr(TCC0_ADDR + 0x00, (1 << 1));
+}
+
+/**
+ * @brief Get status of push-button
+ *
+ * @return boolean True if the button is pushed
+ */
+int button_status(void)
+{
+	u32 v;
+#ifdef XPLAINED
+	v = reg_rd(0x60000000 + 0x20);
+	if ((v & (1 << 15)) == 0)
+		return(1);
+#else
+	v = reg_rd(0x60000000 + 0x20);
+	if ((v & (1 << 2)) == 0)
+		return(1);
+#endif
+	return(0);
 }
 
 /**

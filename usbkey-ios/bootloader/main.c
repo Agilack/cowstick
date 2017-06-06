@@ -25,7 +25,10 @@ int main(void)
 	hw_init();
 	
 	/* Heartbeat test */
-	led_status(0x00020006);
+	if (button_status())
+		led_status(0x00020006);
+	else
+		led_status(0x00080010);
 
 	/* Infinite loop, do nothing */
 	while(1)

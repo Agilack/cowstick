@@ -29,6 +29,7 @@
 #define TCC0_ADDR    ((u32)0x42002000)
 
 void hw_init(void);
+int  button_status(void);
 void led_status(u32 mode);
 
 /**
