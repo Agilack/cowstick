@@ -15,6 +15,9 @@
  */
 #include "hardware.h"
 
+void Jumper(u32 fct, u32 stack);
+static void bootloader(void);
+
 /**
  * @brief Entry point of the bootloader
  *
@@ -24,18 +27,45 @@ int main(void)
 	/* Initialize low-level hardware*/
 	hw_init();
 	
-	/* Heartbeat test */
+	/* If button is pressed at power on, start into Bootloader mode */
 	if (button_status())
-		led_status(0x00020006);
+		bootloader();
+	/* Else, start the main firmware */
 	else
+	{
+		/* Get stack address from firmware vector 0 */
+		u32 stack   = *(u32 *)0x00004000;
+		/* Get firmware entry point from vector 1 */
+		u32 handler = *(u32 *)0x00004004;
+
+		/* In case of invalid stack address, start bootloader */
+		if ((stack < 0x20000000) || (stack > 0x20008000))
+			bootloader();
+
 		led_status(0x00080010);
+
+		/* Update Vector Table Offset Register */
+		reg_wr(0xE000ED08, 0x00004000);
+
+		/* Go ! Go ! Go ! */
+		Jumper(handler, stack);
+	}
+
+	/* Never comes here */
+	return(0);
+}
+
+/**
+ * @brief Main function when start in bootloader mode
+ *
+ */
+static void bootloader(void)
+{
+	led_status(0x00020006);
 
 	/* Infinite loop, do nothing */
 	while(1)
 		;
-
-	/* Hey, this is only a skeleton :) */
-	return(0);
 }
 
 /* EOF */

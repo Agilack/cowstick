@@ -110,6 +110,19 @@ Reset_Handler:
     bl  main
 
 /**
+ * @brief Jump to an arbitrary address with a new stack
+ *
+ * @param fct   Address where to jump
+ * @param stack Address of the new stack to use
+ */
+.align 4
+	.thumb_func
+	.global Jumper
+Jumper :
+	mov sp, r1
+	bx  r0
+
+/**
  * @brief Default handler is an infinite loop for all unsupported events
  *
  */
