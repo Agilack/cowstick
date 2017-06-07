@@ -108,15 +108,19 @@ u8 *usb_find_desc(usb_module *mod, u8 rtype, u8 type, u8 index, int *size)
 {
 	u8 *ptr;
 
+#ifdef DEBUG
 	/* Sanity check */
 	if ((mod == 0) || (mod->desc == 0))
 		return 0;
+#endif
 
 	/* Search from the begining of the descriptor index */
 	if (rtype == 0)
 		ptr = mod->desc;
 	else if (rtype == 1)
 		ptr = mod->desc_iface;
+	else
+		return 0;
 
 	while(*ptr)
 	{
@@ -179,7 +183,7 @@ void usb_init(void)
  * @brief Interrupt handler
  *
  * This function must be called when an interrupt is received from USB. It
- * if NOT the target function of cpu vector because we need a pointer to the
+ * is NOT the target function of cpu vector because we need a pointer to the
  * usb_module structure.
  *
  * @param mod Pointer to the USB module configuration
@@ -407,7 +411,7 @@ void usb_ep_enable(usb_module *mod, u8 ep, u8 mode)
 /* -------------------------------------------------------------------------- */
 
 /**
- * @brief Handle an interrupt for a specifid endpoint
+ * @brief Handle an interrupt for a specific endpoint
  *
  * @param mod Pointer to the USB module configuration
  * @param ep  Endpoint number
@@ -442,13 +446,13 @@ static void ep_irq(usb_module *mod, u8 ep)
 	/* If the DIR flag is set : IN */
 	else if (mod->ep_status[ep].flags & EP_DIR_IN)
 	{
-		/* If Tranfser Stall on bank 1 (TRSTALL1) */
+		/* If Transfer Stall on bank 1 (TRSTALL1) */
 		if (flags & (1 << 6))
 		{
 			/* Ack/clear event */
 			reg8_wr(ep_addr + 0x07, (1 << 6));
 		}
-		/* If Tranfser Fail on bank 1 (TRFAIL1) */
+		/* If Transfer Fail on bank 1 (TRFAIL1) */
 		else if (flags & (1 << 3))
 		{
 			/* Clear Bank1 status */
@@ -574,7 +578,6 @@ static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 
 	if (mod->ep_status[ep].count < mod->ep_status[ep].size)
 	{
-		int tlen;
 		u8 *buffer = mod->ep_status[ep].data;
 		buffer += mod->ep_status[ep].count;
 
@@ -677,7 +680,6 @@ static void ep_transfer_setup(usb_module *mod, u8 ep)
 {
 	u32 ep_addr = (USB_ADDR + 0x100 + (ep << 5));
 	u16 bytes = (mod->ep_desc[ep].b0_pcksize & 0x3FF);
-	int i;
 
 	/* Clear bank status */
 	mod->ep_desc[ep].b0_status_bk = 0;
