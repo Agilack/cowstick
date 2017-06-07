@@ -14,6 +14,7 @@
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
 #include "hardware.h"
+#include "usb.h"
 
 void Jumper(u32 fct, u32 stack);
 static void bootloader(void);
@@ -61,6 +62,9 @@ int main(void)
  */
 static void bootloader(void)
 {
+	/* Initialize USB stack */
+	usb_init();
+
 	led_status(0x00020006);
 
 	/* Infinite loop, do nothing */

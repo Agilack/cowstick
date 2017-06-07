@@ -114,12 +114,46 @@ static inline void hw_init_clock(void)
 	/* Set Divisor for GCLK6 : disabled */
 	reg_wr(GCLK_ADDR + 0x08, (1 << 8) | 0x06);
 	reg_wr(GCLK_ADDR + 0x04, (0 << 16) | (0x06 << 8) | 0x06);
-	/* Set Divisor for GCLK7 : disabled */
+	/* Set Divisor for GCLK7 : enabled, DFLL48M, no divisor */
 	reg_wr(GCLK_ADDR + 0x08, (1 << 8) | 0x07);
-	reg_wr(GCLK_ADDR + 0x04, (0 << 16) | (0x06 << 8) | 0x07);
+	reg_wr(GCLK_ADDR + 0x04, (1 << 16) | (0x07 << 8) | 0x07);
 	/* Set Divisor for GCLK8 : disabled */
 	reg_wr(GCLK_ADDR + 0x08, (1 << 8) | 0x08);
 	reg_wr(GCLK_ADDR + 0x04, (0 << 16) | (0x06 << 8) | 0x08);
+
+	/* Enable DFLL block */
+	reg16_wr(SYSCTRL_ADDR + 0x24, (1 << 1));
+	while ( ! (reg_rd(SYSCTRL_ADDR + 0x0C) & 0x00000010))
+		;
+	/* Configure DFLL multiplier (DFLLMUL) */
+	reg_wr(SYSCTRL_ADDR + 0x2c, (1 << 20) | (1 << 16) | 0xBB80);
+	/* Set DFLL coarse calibration value */
+	dfll_coarse = (*(u32 *)0x00806024 >> 26) & 0x3F;
+	reg_wr(SYSCTRL_ADDR + 0x28, (0x0000 << 16) | (dfll_coarse << 10) | 512);
+	/* Configure DFLL */
+	dfll_cfg = (1 << 10)  /* Bypass Coarse Lock      */
+	         | (1 <<  9)  /* Quick Lock Disable      */
+	         | (1 <<  5)  /* USB Clock Recovery Mode */
+	         | (1 <<  2)  /* Mode: closed-loop       */
+	         | (1 <<  1); /* Enable DFLL             */
+	reg16_wr(SYSCTRL_ADDR + 0x24, dfll_cfg);
+	/* Wait depending on DFLL mode (closed or open loop) */
+	if (reg_rd(SYSCTRL_ADDR + 0x24) & 0x04)
+	{
+		u32 wait_mask = 0x10;
+		/* Wait for DFLL to be ready */
+		while((reg_rd(SYSCTRL_ADDR + 0X0C) & wait_mask) != wait_mask)
+			;
+	}
+	else
+	{
+		/* Wait for DFLL to be ready */
+		while((reg_rd(SYSCTRL_ADDR + 0X0C) & 0x10) == 0)
+			;
+	}
+	/* Wait end of clock domains synchronization */
+	while (reg8_rd(GCLK_ADDR + 0x01) & 0x80)
+		;
 }
 
 /**

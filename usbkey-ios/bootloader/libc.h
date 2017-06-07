@@ -1,6 +1,6 @@
 /**
- * @file  api.s
- * @brief Table of pointers for API entries
+ * @file  libc.h
+ * @brief Definitions and prototypes for standard library functions
  *
  * @author Saint-Genest Gwenael <gwen@cowlab.fr>
  * @copyright Cowlab (c) 2017
@@ -13,27 +13,10 @@
  * License along with this program, see LICENSE.md file for more details.
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
+#ifndef LIBC_H
+#define LIBC_H
 
-.syntax unified
-.code 16
+void *memcpy (void *dst, const void *src, int n);
+void *memset (void *dst, int value, int n);
 
-.section .api
-.align 4
-
-api_global: /* Offset 0xC0 */
-	.long 0xDEADBEEF
-	.long 0
-	.long 0
-	.long led_status
-
-api_libc: /* Offset 0xD0 */
-	.long memset
-	.long memcpy
-	.long 0
-	.long 0
-
-api_usb: /* Offset 0xE0 */
-	.long usb_config
-	.long usb_irq
-	.long usb_transfer
-	.long usb_ep_enable
+#endif
