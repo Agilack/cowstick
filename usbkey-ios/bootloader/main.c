@@ -14,6 +14,7 @@
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
 #include "hardware.h"
+#include "uart.h"
 #include "usb.h"
 
 void Jumper(u32 fct, u32 stack);
@@ -62,6 +63,8 @@ int main(void)
  */
 static void bootloader(void)
 {
+	/* Initialize UART debug port */
+	uart_init();
 	/* Initialize USB stack */
 	usb_init();
 

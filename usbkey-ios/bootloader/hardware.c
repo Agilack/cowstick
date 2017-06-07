@@ -18,6 +18,7 @@
 static inline void hw_init_button(void);
 static inline void hw_init_clock(void);
 static inline void hw_init_leds(void);
+static inline void hw_init_uart(void);
 
 /**
  * @brief Called on startup to init processor, clocks and some peripherals
@@ -38,6 +39,7 @@ void hw_init(void)
 
 	hw_init_button();
 	hw_init_leds();
+	hw_init_uart();
 }
 
 /**
@@ -209,6 +211,27 @@ static inline void hw_init_leds(void)
 	led_status(0);
 	/* Enable TCC0 */
 	reg_wr(TCC0_ADDR + 0x00, (1 << 1));
+}
+
+/**
+ * @brief Initialize auxilary uart
+ *
+ */
+static inline void hw_init_uart(void)
+{
+#ifdef XPLAINED
+	/* PINCFG: Enable PMUX for RX/TX pins */
+	reg8_wr(0x60000000 + 0x56, 0x01); /* PA22 : TX */
+	reg8_wr(0x60000000 + 0x57, 0x01); /* PA23 : RX */
+	/* Set peripheral function C (SERCOM) for PA22 and PA23 */
+	reg8_wr(0x60000000 + 0x3B, (0x02 << 4) | (0x02 << 0));
+#else
+	/* PINCFG: Enable PMUX for RX/TX pins */
+	reg8_wr(0x60000000 + 0x50, 0x01); /* PA16 : TX */
+	reg8_wr(0x60000000 + 0x51, 0x01); /* PA17 : RX */
+	/* Set peripheral function D (SERCOM) for PA16 and PA17 */
+	reg8_wr(0x60000000 + 0x38, (0x03 << 4) | (0x03 << 0));
+#endif
 }
 
 /**

@@ -16,7 +16,7 @@
 CROSS=arm-none-eabi-
 TARGET=loader
 
-SRC = main.c hardware.c libc.c usb.c
+SRC = main.c hardware.c libc.c uart.c usb.c
 ASRC = startup.s api.s
 
 CC = $(CROSS)gcc

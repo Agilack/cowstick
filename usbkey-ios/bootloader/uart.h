@@ -1,6 +1,6 @@
 /**
- * @file  api.s
- * @brief Table of pointers for API entries
+ * @file  uart.h
+ * @brief Definitions and prototypes for UART functions
  *
  * @author Saint-Genest Gwenael <gwen@cowlab.fr>
  * @copyright Cowlab (c) 2017
@@ -13,33 +13,19 @@
  * License along with this program, see LICENSE.md file for more details.
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
+#ifndef UART_H
+#define UART_H
 
-.syntax unified
-.code 16
+#include "types.h"
 
-.section .api
-.align 4
+void uart_crlf(void);
+void uart_dump(u8 *d, int l);
+void uart_init(void);
+void uart_putc(unsigned char c);
+void uart_puts(char *s);
+void uart_puthex  (const u32 c);
+void uart_puthex8 (const u8  c);
+void uart_puthex16(const u16 c);
 
-api_global: /* Offset 0xC0 */
-	.long 0xDEADBEEF
-	.long 0
-	.long 0
-	.long led_status
-
-api_libc: /* Offset 0xD0 */
-	.long memset
-	.long memcpy
-	.long 0
-	.long 0
-
-api_usb: /* Offset 0xE0 */
-	.long usb_config
-	.long usb_irq
-	.long usb_transfer
-	.long usb_ep_enable
-
-api_uart: /* Offset 0xF0 */
-	.long uart_init
-	.long uart_puts
-	.long uart_puthex
-	.long 0
+#endif
+/* EOF */
