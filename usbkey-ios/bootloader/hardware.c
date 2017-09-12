@@ -26,9 +26,6 @@ static inline void hw_init_uart(void);
  */
 void hw_init(void)
 {
-	/* Update NVM (flash memory wait-state before any clock config */
-	reg_wr(NVM_ADDR + 0x04, (0 << 1)); /* Default: 0 = no wait state */
-
 	/* Use PM to configure clock sources */
 	reg8_wr(PM_ADDR + 0x08, 0x00); /* CPU  clock select (CPUSEL)  */
 	reg8_wr(PM_ADDR + 0x09, 0x00); /* APBA clock select (APBASEL) */
@@ -98,9 +95,9 @@ static inline void hw_init_clock(void)
 	/* Set Divisor for GCLK0 : enabled, OSC8M, no divisor */
 	reg_wr(GCLK_ADDR + 0x08, (1 << 8) | 0x00);
 	reg_wr(GCLK_ADDR + 0x04, (1 << 16) | (0x06 << 8) | 0x00);
-	/* Set Divisor for GCLK1 : disabled */
+	/* Set Divisor for GCLK1 : enabled, OSC8M, no divisor */
 	reg_wr(GCLK_ADDR + 0x08, (1 << 8) | 0x01);
-	reg_wr(GCLK_ADDR + 0x04, (0 << 16) | (0x06 << 8) | 0x01);
+	reg_wr(GCLK_ADDR + 0x04, (1 << 16) | (0x06 << 8) | 0x01);
 	/* Set Divisor for GCLK2 : disabled */
 	reg_wr(GCLK_ADDR + 0x08, (1 << 8) | 0x02);
 	reg_wr(GCLK_ADDR + 0x04, (0 << 16) | (0x06 << 8) | 0x02);
@@ -156,6 +153,13 @@ static inline void hw_init_clock(void)
 	/* Wait end of clock domains synchronization */
 	while (reg8_rd(GCLK_ADDR + 0x01) & 0x80)
 		;
+
+	/* Update NVM (flash memory wait-state before switching to 48MHz) */
+	reg_wr(NVM_ADDR + 0x04, (1 << 1)); /* 1 wait state (see table 37-40) */
+
+	/* Set Divisor for GCLK0 : enabled, DFLL48M, no divisor */
+	reg_wr(GCLK_ADDR + 0x08, (1 << 8) | 0x00);
+	reg_wr(GCLK_ADDR + 0x04, (1 << 16) | (0x07 << 8) | 0x00);
 }
 
 /**

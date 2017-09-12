@@ -44,8 +44,8 @@ void uart_init(void)
 
 	/* Enable SERCOM3 clock (APBCMASK) */
 	reg_set(PM_ADDR + 0x20, (1 << 5));
-	/* Set GCLK for SERCOM3 (generic clock generator 0) */
-	reg16_wr (GCLK_ADDR + 0x02, (1 << 14) | (0 << 8) | 23);
+	/* Set GCLK for SERCOM3 (generic clock generator 1) */
+	reg16_wr (GCLK_ADDR + 0x02, (1 << 14) | (1 << 8) | 23);
 
 	/* 2) Initialize UART block   */
 
