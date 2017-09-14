@@ -55,6 +55,8 @@ typedef struct usb_class
 	void (*setup) (struct usb_module *mod);
 	void (*sof)   (struct usb_module *mod);
 	void (*xfer)  (struct usb_module *mod, u8 ep);
+	/* Datas */
+	void *priv;
 } usb_class;
 
 typedef struct usb_module

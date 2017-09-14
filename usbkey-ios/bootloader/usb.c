@@ -387,7 +387,7 @@ void usb_ep_enable(usb_module *mod, u8 ep, u8 mode)
 	}
 
 	/* Setup for first transfer */
-	if (mode & 0x0F)
+	if ((mode & 0x0F) == 0x01)
 	{
 		mod->ep_desc[ep].b0_addr = (u32)mod->ctrl;
 		mod->ep_desc[ep].b0_pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
@@ -635,19 +635,35 @@ static void ep_transfer_in(usb_module *mod, u8 ep, int isr)
 static void ep_transfer_out(usb_module *mod, u8 ep, int isr)
 {
 	u32 ep_addr = (USB_ADDR + 0x100 + (ep << 5));
-	int len = mod->ep_status[ep].size;
+	int len   = mod->ep_status[ep].size;
+	int count = 0;
 
 	if (isr)
-		mod->ep_desc[ep].b0_status_bk = 0;
-
-	if (len > 0)
 	{
-		u32 pcksize = 0x30000000 | (0x40 << 14) | (0 << 0);
-		/* Set buffer length : 0 (ZLP) */
+		count = (mod->ep_desc[ep].b0_pcksize & 0x3FF);
+		mod->ep_desc[ep].b0_status_bk = 0;
+		/* Update the number of processed bytes */
+		mod->ep_status[ep].count += count;
+	}
+
+	if ((len > 0) && (count == 0))
+	{
+		int buffer_size = 0x40;
+		/* Set buffer address */
+		if (ep > 0)
+		{
+			u8 *ptr = mod->ep_status[ep].data;
+			/* Update target buffer address */
+			mod->ep_desc[ep].b0_addr = (u32)ptr;
+			/* Update buffer size */
+			buffer_size = mod->ep_status[ep].size;
+		}
+		u32 pcksize = 0x30000000 | (buffer_size << 14) | (0 << 0);
+		/* Set buffer length */
 		mod->ep_desc[ep].b0_pcksize = pcksize;
 		/* Set All Bank0 interrupts */
 		reg8_wr(ep_addr + 0x09, 0x35);
-		/* Clear BK0RDY */
+		/* Clear BK0RDY (bank is empty) */
 		reg8_wr(ep_addr + 0x04, (1 << 6));
 	}
 	else if (mod->ep_status[ep].flags & EP_ZLP)
