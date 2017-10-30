@@ -14,11 +14,18 @@
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
 #include "hardware.h"
+#include "libc.h"
 #include "uart.h"
 #include "usb.h"
+#include "usb_ecm.h"
+#include "usb_desc.h"
 
 void Jumper(u32 fct, u32 stack);
 static void bootloader(void);
+
+usb_module usbmod;
+usb_class  ecm_class;
+u8 ep1[64];
 
 /**
  * @brief Entry point of the bootloader
@@ -28,7 +35,7 @@ int main(void)
 {
 	/* Initialize low-level hardware*/
 	hw_init();
-	
+
 	/* If button is pressed at power on, start into Bootloader mode */
 	if (button_status())
 		bootloader();
@@ -68,11 +75,28 @@ static void bootloader(void)
 	/* Initialize USB stack */
 	usb_init();
 
+	uart_puts("--=={ Cowstick Bootloader }==--\r\n");
+
+	/* Configure USB device (and attach it) */
+	memset(&usbmod, 0, sizeof(usb_module));
+	usbmod.desc = (u8*)usb_ecm_desc;
+	ecm_init(&usbmod, &ecm_class);
+	usb_config(&usbmod);
+
 	led_status(0x00020006);
 
 	/* Infinite loop, do nothing */
 	while(1)
 		;
+}
+
+/**
+ * @brief USB peripheral interrupt handler
+ *
+ */
+void USB_Handler(void)
+{
+	usb_irq(&usbmod);
 }
 
 /* EOF */
