@@ -15,6 +15,7 @@
  */
 #include "hardware.h"
 #include "libc.h"
+#include "net.h"
 #include "uart.h"
 #include "usb.h"
 #include "usb_ecm.h"
@@ -64,6 +65,11 @@ int main(void)
 	return(0);
 }
 
+/* Bootloader variables */
+network  bl_net_cfg;
+u8       bl_net_rx_buffer[512];
+u8       bl_net_tx_buffer[512];
+
 /**
  * @brief Main function when start in bootloader mode
  *
@@ -77,17 +83,33 @@ static void bootloader(void)
 
 	uart_puts("--=={ Cowstick Bootloader }==--\r\n");
 
+	/* Initialize network interface */
+	net_init(&bl_net_cfg);
+	/* Configure network interface : set RX/TX buffers */
+	bl_net_cfg.rx_buffer = bl_net_rx_buffer;
+	bl_net_cfg.rx_length = 0;
+	bl_net_cfg.rx_state  = 0;
+	bl_net_cfg.tx_buffer = bl_net_tx_buffer;
+	bl_net_cfg.tx_more   = 0;
+	/* Save pointer to USB ECM driver */
+	bl_net_cfg.driver    = (void *)&usbmod;
+
 	/* Configure USB device (and attach it) */
 	memset(&usbmod, 0, sizeof(usb_module));
 	usbmod.desc = (u8*)usb_ecm_desc;
 	ecm_init(&usbmod, &ecm_class);
+	ecm_class.priv = (void *)&bl_net_cfg;
 	usb_config(&usbmod);
 
 	led_status(0x00020006);
 
-	/* Infinite loop, do nothing */
+	uart_puts("Bootloader: ready\r\n");
+
+	/* Infinite loop for firmware events */
 	while(1)
-		;
+	{
+		net_periodic(&bl_net_cfg);
+	}
 }
 
 /**

@@ -17,6 +17,7 @@
 #include "types.h"
 #include "usb.h"
 #include "uart.h"
+#include "net.h"
 
 static void cb_enable(usb_module *mod);
 static void cb_setup (usb_module *mod);
@@ -42,6 +43,38 @@ void ecm_init(usb_module *mod, usb_class *obj)
 }
 
 /**
+ * @brief Prepare an RX buffer for USB transfer
+ *
+ * @param mod Pointer to the USB module
+ */
+void ecm_rx_prepare(usb_module *mod)
+{
+	network *net;
+
+	/* Sanity check : a network interface must been attached to the ECM */
+	if ((mod->class == 0) || (mod->class->priv == 0))
+	{
+		uart_puts("esb_ecm: RX prepare fails, no network intferface\r\n");
+		return;
+	}
+
+	/* Get network interface from USB class private data */
+	net = (network *)mod->class->priv;
+
+	/* Sanity check : interface must have an RX buffer */
+	if (net->rx_buffer == 0)
+	{
+		uart_puts("usb_ecm: RX prepare fails, no buffer\r\n");
+		return;
+	}
+
+	/* Set buffer length to 0 */
+	net->rx_length = 0;
+	/* Start (prepare) a transfer on endpoint */
+	usb_transfer(mod, 1, net->rx_buffer, 512);
+}
+
+/**
  * @brief Called by USB stack when the device is enabled
  *
  * The device is enabled when a configuration is selected by the remote host
@@ -49,19 +82,34 @@ void ecm_init(usb_module *mod, usb_class *obj)
  *
  * @param mod Pointer to the USB module configuration
  */
-
-u8 ep1[512];
-
 void cb_enable(usb_module *mod)
 {
+	network *net;
+	u8      *rx_buffer;
+
 	/* Enable endpoint 1 for datas host -> device (bulk OUT) */
 	usb_ep_enable(mod, 1, 0x03);
 	/* Enable endpoint 2 for datas device -> host (bulk IN) */
 	usb_ep_enable(mod, 2, 0x30);
 	/* Enable endpoint 3 for CDC control (interrupt IN) */
 	usb_ep_enable(mod, 3, 0x40);
-	
-	usb_transfer(mod, 1, ep1, 512);
+
+	/* Sanity check : a network interface must been attached to the ECM */
+	if ((mod->class == 0) || (mod->class->priv == 0))
+	{
+		uart_puts("esb_ecm: Enable error, no network intferface\r\n");
+		return;
+	}
+
+	/* Get network interface from USB class private data */
+	net = (network *)mod->class->priv;
+	/* Get RX buffer (if any) */
+	rx_buffer = net->rx_buffer;
+
+	if (rx_buffer)
+		usb_transfer(mod, 1, rx_buffer, 512);
+	else
+		uart_puts("esb_ecm: Enable error, no RX buffer\r\n");
 }
 
 /**
@@ -89,10 +137,27 @@ static void cb_setup (usb_module *mod)
 	}
 }
 
+/**
+ * @brief Called by USB layer when a transfer is complete on ECM endpoint
+ *
+ * @param mod Pointer to the USB module
+ * @param ep  Endpoint id
+ */
 static void cb_xfer(usb_module *mod, u8 ep)
 {
-	uart_puts("ECM: xfer\r\n");
-	uart_dump(ep1, mod->ep_status[ep].count);
+	network *net;
 
-	usb_transfer(mod, 1, ep1, 512);
+	uart_puts("ECM: xfer\r\n");
+
+	if ((mod->class == 0) || (mod->class->priv == 0))
+	{
+		uart_puts("ERROR, no network interface\r\n");
+		return;
+	}
+
+	/* Get network interface from USB class private data */
+	net = (network *)mod->class->priv;
+	/* Update buffer length wth count of received datas */
+	net->rx_length = mod->ep_status[ep].count;
 }
+/* EOF */

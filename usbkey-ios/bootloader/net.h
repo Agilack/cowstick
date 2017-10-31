@@ -1,6 +1,6 @@
 /**
- * @file  usb_ecm.h
- * @brief Definitions for USB Ethernet Control Model (ECM)
+ * @file  net.h
+ * @brief Definitions and prototypes for network interface
  *
  * @author Saint-Genest Gwenael <gwen@cowlab.fr>
  * @copyright Cowlab (c) 2017
@@ -13,11 +13,29 @@
  * License along with this program, see LICENSE.md file for more details.
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
-#ifndef USB_ECM_H
-#define USB_ECM_H
+#ifndef NET_H
+#define NET_H
+#include "types.h"
 
-#include "usb.h"
+typedef struct _network
+{
+	u8  *rx_buffer;
+	int  rx_length;
+	int  rx_state;
+	u8  *tx_buffer;
+	void (*tx_more)(struct _network *mod);
+	/* Pointer to low-level driver */
+	void *driver;
+} network;
 
-void ecm_init(usb_module *mod, usb_class *obj);
-void ecm_rx_prepare(usb_module *mod);
+typedef struct __attribute__((packed))
+{
+	u8  dst[6];
+	u8  src[6];
+	u16 proto;
+} eth_frame;
+
+void net_init    (network *mod);
+void net_periodic(network *mod);
+
 #endif
