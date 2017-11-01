@@ -38,8 +38,6 @@ void ecm_init(usb_module *mod, usb_class *obj)
 	obj->xfer   = cb_xfer;
 	/* Register the class into USB module */
 	mod->class = obj;
-	
-	uart_puts("ecm_init\r\n");
 }
 
 /**
@@ -109,7 +107,7 @@ void cb_enable(usb_module *mod)
 	if (rx_buffer)
 		usb_transfer(mod, 1, rx_buffer, 512);
 	else
-		uart_puts("esb_ecm: Enable error, no RX buffer\r\n");
+		uart_puts("usb_ecm: Enable error, no RX buffer\r\n");
 }
 
 /**
@@ -147,11 +145,9 @@ static void cb_xfer(usb_module *mod, u8 ep)
 {
 	network *net;
 
-	uart_puts("ECM: xfer\r\n");
-
 	if ((mod->class == 0) || (mod->class->priv == 0))
 	{
-		uart_puts("ERROR, no network interface\r\n");
+		uart_puts("usb_ecn: ERROR, no network interface\r\n");
 		return;
 	}
 

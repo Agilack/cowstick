@@ -35,6 +35,8 @@ typedef struct __attribute__((packed))
 	u16 proto;
 } eth_frame;
 
+u32  htonl(u32 v);
+u16  htons(u16 v);
 void net_init    (network *mod);
 void net_periodic(network *mod);
 

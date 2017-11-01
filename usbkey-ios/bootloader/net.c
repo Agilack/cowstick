@@ -20,6 +20,35 @@
 #include "usb_ecm.h"
 
 /**
+ * @brief Generic function to convert a long value to network byte order
+ *
+ * @param v Long integer with bytes in CPU order
+ * @return  Long integer with bytes in network order
+ */
+u32 htonl(u32 v)
+{
+	u32 vout;
+	vout  = ((v & 0x000000FF) << 24);
+	vout |= ((v & 0x0000FF00) <<  8);
+	vout |= ((v & 0x00FF0000) >>  8);
+	vout |= ((v & 0xFF000000) >> 24);
+	return(vout);
+}
+
+/**
+ * @brief Generic function to convert a short value to network byte order
+ *
+ * @param v Short integer with bytes in CPU order
+ * @return  Short integer with bytes in network order
+ */
+u16  htons(u16 v)
+{
+	u16 vout;
+	vout = ((v & 0xFF) << 8) | (v >> 8);
+	return(vout);
+}
+
+/**
  * @brief Initialize the network module
  *
  */
@@ -57,8 +86,26 @@ void net_periodic(network *mod)
 
 	frame = (eth_frame *)mod->rx_buffer;
 	
-	uart_puts("NET: data received\r\n");
-	uart_dump((u8 *)frame, mod->rx_length);
+	/* Limit buffer size before dump on console - DEBUG ONLY */
+	if (mod->rx_length > 0x50)
+		mod->rx_length = 0x50;
+
+	switch( htons(frame->proto) )
+	{
+		case 0x0800:
+			uart_puts("NET: received an IPv4 datagram\r\n");
+			uart_dump((u8 *)frame, mod->rx_length);
+			break;
+		case 0x0806:
+			uart_puts("NET: received a MAC packet\r\n");
+			uart_dump((u8 *)frame, mod->rx_length);
+			break;
+		case 0x86DD:
+			uart_puts("NET: received an IPv6 datagram\r\n");
+			break;
+		default:
+			uart_puts("NET: data received (unknown protocol)\r\n");
+	}
 	ecm_rx_prepare(mod->driver);
 }
 
