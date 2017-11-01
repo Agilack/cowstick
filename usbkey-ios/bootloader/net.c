@@ -19,6 +19,8 @@
 #include "uart.h"
 #include "usb_ecm.h"
 
+static const u8 cfg_mac[6] = {0x70, 0xB3, 0xD5, 0x4C, 0xE8, 0x01};
+
 /**
  * @brief Generic function to convert a long value to network byte order
  *
@@ -56,6 +58,8 @@ void net_init(network *mod)
 {
 	/* Clean interface structure */
 	memset(mod, 0, sizeof(network));
+	/* Set the default MAC address for the interface */
+	memcpy(mod->mac, cfg_mac, 6);
 }
 
 /**
@@ -109,4 +113,47 @@ void net_periodic(network *mod)
 	ecm_rx_prepare(mod->driver);
 }
 
+/**
+ * @brief Transmit a packet on the network
+ *
+ * @param mod  Pointer to the network interface structure
+ * @param size Number of bytes to send
+ */
+void net_send(network *mod, u32 size)
+{
+	/* Call USB ECM layer to process */
+	ecm_tx(mod->driver, mod->tx_buffer, size + 14);
+}
+
+/**
+ * @brief Get a pointer on a buffer that can be used for TX
+ *
+ * @param mod   Pointer to the network interface structure
+ * @param proto ID of the ethernet protocol to use into the frame
+ */
+u8* net_tx_buffer(network *mod, u16 proto)
+{
+	eth_frame *frame = 0;
+
+	frame = (eth_frame *)mod->tx_buffer;
+
+	if (proto != 0)
+	{
+		const u8 *s;
+		int i;
+
+		/* Set MAC dest (copy from received frame) */
+		s = (mod->rx_buffer + 6);
+		for (i = 0; i < 6; i++)
+			frame->dst[i] = *s++;
+		/* Set MAC source (from network interface) */
+		s = mod->mac;
+		for (i = 0; i < 6; i++)
+			frame->src[i] = *s++;
+		/* Set (ethernet) protocol */
+		frame->proto = htons(proto);
+	}
+
+	return (mod->tx_buffer + 14);
+}
 /* EOF */

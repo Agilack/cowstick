@@ -73,6 +73,18 @@ void ecm_rx_prepare(usb_module *mod)
 }
 
 /**
+ * @brief Send a network packet over USB ECM
+ *
+ * @param mod    Pointer to network interface structure
+ * @param buffer Pointer to the data buffer to send
+ * @param size   Size of the packet (in bytes)
+ */
+void ecm_tx(usb_module *mod, u8 *buffer, u32 size)
+{
+	usb_transfer(mod, 0x82, buffer, size);
+}
+
+/**
  * @brief Called by USB stack when the device is enabled
  *
  * The device is enabled when a configuration is selected by the remote host
@@ -153,7 +165,19 @@ static void cb_xfer(usb_module *mod, u8 ep)
 
 	/* Get network interface from USB class private data */
 	net = (network *)mod->class->priv;
-	/* Update buffer length wth count of received datas */
-	net->rx_length = mod->ep_status[ep].count;
+
+	switch (ep)
+	{
+		/* RX */
+		case 0x01:
+			/* Update buffer length wth count of received datas */
+			net->rx_length = mod->ep_status[ep].count;
+			break;
+		/* TX */
+		case 0x02:
+			uart_puts("usb_ecm: TX complete\r\n");
+			/* Clear ethernet header */
+			memset(net->tx_buffer, 0, 14);
+	}
 }
 /* EOF */

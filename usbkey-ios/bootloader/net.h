@@ -26,6 +26,8 @@ typedef struct _network
 	void (*tx_more)(struct _network *mod);
 	/* Pointer to low-level driver */
 	void *driver;
+	/* MAC address of the interface */
+	u8    mac[6];
 } network;
 
 typedef struct __attribute__((packed))
@@ -39,5 +41,7 @@ u32  htonl(u32 v);
 u16  htons(u16 v);
 void net_init    (network *mod);
 void net_periodic(network *mod);
+void net_send(network *mod, u32 size);
+u8*  net_tx_buffer(network *mod, u16 proto);
 
 #endif

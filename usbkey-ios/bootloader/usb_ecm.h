@@ -20,4 +20,5 @@
 
 void ecm_init(usb_module *mod, usb_class *obj);
 void ecm_rx_prepare(usb_module *mod);
+void ecm_tx(usb_module *mod, u8 *buffer, u32 size);
 #endif
