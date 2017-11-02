@@ -17,7 +17,7 @@ CROSS=arm-none-eabi-
 TARGET=loader
 
 SRC = main.c hardware.c libc.c uart.c usb.c usb_ecm.c
-SRC += net.c
+SRC += net.c net_arp.c
 ASRC = startup.s api.s
 
 CC = $(CROSS)gcc
@@ -28,7 +28,7 @@ EDBG = edbg
 CFLAGS  = -mcpu=cortex-m0plus -mthumb
 CFLAGS += -nostdlib -Os -ffunction-sections
 CFLAGS += -fno-builtin-memcpy -fno-builtin-memset
-CFLAGS += -Wall -pedantic
+CFLAGS += -Wall -pedantic -Wextra
 
 LDFLAGS = -nostartfiles -T cowstick.ld -Wl,-Map=$(TARGET).map,--cref,--gc-sections -static
 

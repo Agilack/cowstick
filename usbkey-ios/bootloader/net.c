@@ -14,6 +14,7 @@
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
 #include "net.h"
+#include "net_arp.h"
 #include "libc.h"
 #include "types.h"
 #include "uart.h"
@@ -90,19 +91,13 @@ void net_periodic(network *mod)
 
 	frame = (eth_frame *)mod->rx_buffer;
 	
-	/* Limit buffer size before dump on console - DEBUG ONLY */
-	if (mod->rx_length > 0x50)
-		mod->rx_length = 0x50;
-
 	switch( htons(frame->proto) )
 	{
 		case 0x0800:
 			uart_puts("NET: received an IPv4 datagram\r\n");
-			uart_dump((u8 *)frame, mod->rx_length);
 			break;
 		case 0x0806:
-			uart_puts("NET: received a MAC packet\r\n");
-			uart_dump((u8 *)frame, mod->rx_length);
+			arp_receive(mod, mod->rx_buffer+14, mod->rx_length-14);
 			break;
 		case 0x86DD:
 			uart_puts("NET: received an IPv6 datagram\r\n");
