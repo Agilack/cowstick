@@ -15,6 +15,7 @@
  */
 #include "net.h"
 #include "net_arp.h"
+#include "net_ipv4.h"
 #include "libc.h"
 #include "types.h"
 #include "uart.h"
@@ -61,6 +62,9 @@ void net_init(network *mod)
 	memset(mod, 0, sizeof(network));
 	/* Set the default MAC address for the interface */
 	memcpy(mod->mac, cfg_mac, 6);
+
+	/* Initialize IPv4 for this interface */
+	ipv4_init(mod);
 }
 
 /**
@@ -94,7 +98,7 @@ void net_periodic(network *mod)
 	switch( htons(frame->proto) )
 	{
 		case 0x0800:
-			uart_puts("NET: received an IPv4 datagram\r\n");
+			ipv4_receive(mod, mod->rx_buffer+14, mod->rx_length-14);
 			break;
 		case 0x0806:
 			arp_receive(mod, mod->rx_buffer+14, mod->rx_length-14);
