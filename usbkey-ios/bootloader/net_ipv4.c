@@ -19,7 +19,8 @@
 #include "types.h"
 #include "uart.h"
 
-u8  *usbnet_rx_buffer(void);
+/* UDP functions */
+static void udp4_receive(network *mod, udp_packet *pkt, ip_dgram *ip);
 
 /**
  * @brief Initialize the IPv4 protocol module
@@ -60,7 +61,22 @@ void ipv4_receive(network *mod, u8 *buffer, int length)
 	}
 	else if (req->proto == 0x11)
 	{
-		uart_puts("IPv4: receive an UDP packet\r\n");
+		udp_packet *pkt = (udp_packet *)(buffer + 20);
+		udp4_receive(mod, pkt, req);
+		/* DEBUG - only for tests */
+		if (htons(pkt->dst_port) == 8)
+		{
+			udp_conn conn;
+			uart_puts("UDP: send dummy packet ... ");
+			conn.ip_remote   = 0xFFFFFFFF;
+			conn.port_remote = pkt->src_port;
+			conn.port_local  = htons(0x0008);
+			conn.rsp = 0;
+			u8 *buf = udp4_tx_buffer(mod, &conn);
+			memcpy(buf, "Hello World!\0", 13);
+			udp4_send(mod, &conn, 12);
+			uart_puts("done\r\n");
+		}
 	}
 	else if (req->proto == 0x06)
 	{
@@ -174,5 +190,74 @@ u16 ip_cksum(u32 sum, const u8 *data, u16 len)
 	
 	/* Return sum in host byte order. */
 	return (u16)sum;
+}
+
+/* ------------------------------------------------------------------------- */
+/* --                                 UDP                                 -- */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * @brief Called by IPv4 layer when an UDP packet is received
+ *
+ * @param pkt Pointer to the received UDP packet
+ *
+ */
+static void udp4_receive(network *mod, udp_packet *pkt, ip_dgram *ip)
+{
+	int i;
+
+	(void)mod;
+
+	uart_puts("UDP");
+	uart_puts(" src_port="); uart_puthex16( htons(pkt->src_port) );
+	uart_puts(" dst_port="); uart_puthex16( htons(pkt->dst_port) );
+	uart_crlf();
+	i = ip->length;
+	if (i > 32)
+		i = 32;
+	uart_dump((u8 *)pkt, i);
+}
+
+/**
+ * @brief Transmit an UDP packet
+ *
+ * @param conn Pointer to the UDP connection structure
+ * @param len  Size of the packet to send (in bytes)
+ */
+void udp4_send(network *mod, udp_conn *conn, int len)
+{
+	/* Update UDP header with packet length */
+	udp_packet *pkt = (udp_packet *)conn->rsp;
+	pkt->length = htons(8 + len);
+	pkt->cksum  = 0;
+
+	/* Call underlying IP layer to send the packet */
+	ipv4_send(mod, len + sizeof(udp_packet));
+}
+
+/**
+ * @brief Get a pointer on a buffer that can be used to transmit an UDP packet
+ *
+ * @param mod  Pointer to the network interface structure
+ * @param conn Pointer to the UDP connection structure
+ */
+u8 *udp4_tx_buffer(network *mod, udp_conn *conn)
+{
+	udp_packet *rsp = 0;
+	u8 *data;
+
+	if (conn->rsp)
+		rsp = conn->rsp;
+	else
+	{
+		rsp = (udp_packet *)ipv4_tx_buffer(mod, conn->ip_remote, 0x11);
+		rsp->src_port = conn->port_local;
+		rsp->dst_port = conn->port_remote;
+		conn->rsp = rsp;
+	}
+
+	data = ((u8*)rsp) + 8;
+
+	return data;
 }
 /* EOF */

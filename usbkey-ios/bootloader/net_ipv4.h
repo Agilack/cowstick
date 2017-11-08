@@ -41,4 +41,27 @@ void ipv4_receive(struct _network *mod, u8 *buffer, int length);
 void ipv4_send(network *mod, int len);
 u8  *ipv4_tx_buffer(network *mod, u32 dest, u8 proto);
 
+/* -------------------------------------------------------------------------- */
+/*                                    UDP                                     */
+/* -------------------------------------------------------------------------- */
+
+typedef struct __attribute__((packed))
+{
+	u16 src_port;
+	u16 dst_port;
+	u16 length;
+	u16 cksum;
+} udp_packet;
+
+typedef struct _udp_conn
+{
+	u32 ip_remote;
+	u16 port_local;
+	u16 port_remote;
+	udp_packet *rsp;
+} udp_conn;
+
+void udp4_send(network *mod, udp_conn *conn, int len);
+u8  *udp4_tx_buffer(network *mod, udp_conn *conn);
+
 #endif
