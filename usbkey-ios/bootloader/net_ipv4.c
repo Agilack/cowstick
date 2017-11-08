@@ -51,44 +51,29 @@ void ipv4_receive(network *mod, u8 *buffer, int length)
 		return;
 	}
 
-	if (req->proto == 0x01)
+	/* Process datagram according to the IP protocol used */
+	switch (req->proto)
 	{
-		u8 *dgram;
-		uart_puts("IPv4: receive an ICMP packet\r\n");
-		dgram = ipv4_tx_buffer(mod, 0x0A0A0A03, 0x01);
-		memcpy(dgram, "Hello World!\0", 13);
-		ipv4_send(mod, 12);
-	}
-	else if (req->proto == 0x11)
-	{
-		udp_packet *pkt = (udp_packet *)(buffer + 20);
-		udp4_receive(mod, pkt, req);
-		/* DEBUG - only for tests */
-		if (htons(pkt->dst_port) == 8)
+		case IP_PROTO_ICMP:
+			uart_puts("IPv4: receive an ICMP packet\r\n");
+			break;
+		case IP_PROTO_IGMP:
+			/* Not used yet */
+			break;
+		case IP_PROTO_UDP:
 		{
-			udp_conn conn;
-			uart_puts("UDP: send dummy packet ... ");
-			conn.ip_remote   = 0xFFFFFFFF;
-			conn.port_remote = pkt->src_port;
-			conn.port_local  = htons(0x0008);
-			conn.rsp = 0;
-			u8 *buf = udp4_tx_buffer(mod, &conn);
-			memcpy(buf, "Hello World!\0", 13);
-			udp4_send(mod, &conn, 12);
-			uart_puts("done\r\n");
+			udp_packet *pkt = (udp_packet *)(buffer + 20);
+			udp4_receive(mod, pkt, req);
+			break;
 		}
-	}
-	else if (req->proto == 0x06)
-	{
-		uart_puts("IPv4: receive a TCP packet\r\n");
-	}
-	else
-	{
-		uart_puts("IPv4:");
-		uart_puts(" src="); uart_puthex( htonl(req->src) );
-		uart_puts(" dst="); uart_puthex( htonl(req->dst) );
-		uart_puts(" proto="); uart_puthex8( req->proto );
-		uart_crlf();
+		case IP_PROTO_TCP:
+			uart_puts("IPv4: receive a TCP packet\r\n");
+		default:
+			uart_puts("IPv4:");
+			uart_puts(" src="); uart_puthex( htonl(req->src) );
+			uart_puts(" dst="); uart_puthex( htonl(req->dst) );
+			uart_puts(" proto="); uart_puthex8( req->proto );
+			uart_crlf();
 	}
 
 }

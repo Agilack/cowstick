@@ -43,3 +43,6 @@ api_uart: /* Offset 0xF0 */
 	.long uart_puts
 	.long uart_puthex
 	.long 0
+
+api_net: /* Offset 0x100 */
+	.long net_init

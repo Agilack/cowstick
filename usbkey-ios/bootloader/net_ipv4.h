@@ -18,6 +18,11 @@
 
 #include "types.h"
 
+#define IP_PROTO_ICMP 01
+#define IP_PROTO_IGMP 02
+#define IP_PROTO_TCP  06
+#define IP_PROTO_UDP  17
+
 typedef struct __attribute__((packed))
 {
 	u8  vihl;
