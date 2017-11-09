@@ -13,9 +13,10 @@
  * License along with this program, see LICENSE.md file for more details.
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
-#include "net.h"
-#include "net_ipv4.h"
 #include "libc.h"
+#include "net.h"
+#include "net_dhcp.h"
+#include "net_ipv4.h"
 #include "types.h"
 #include "uart.h"
 
@@ -189,18 +190,23 @@ u16 ip_cksum(u32 sum, const u8 *data, u16 len)
  */
 static void udp4_receive(network *mod, udp_packet *pkt, ip_dgram *ip)
 {
-	int i;
+	if (htons(pkt->dst_port) == 0x43)
+		dhcp_recv(mod, pkt, ip);
+#ifdef NET_UDP_DEBUG
+	else
+	{
+		int i;
 
-	(void)mod;
-
-	uart_puts("UDP");
-	uart_puts(" src_port="); uart_puthex16( htons(pkt->src_port) );
-	uart_puts(" dst_port="); uart_puthex16( htons(pkt->dst_port) );
-	uart_crlf();
-	i = ip->length;
-	if (i > 32)
-		i = 32;
-	uart_dump((u8 *)pkt, i);
+		uart_puts("UDP");
+		uart_puts(" src_port="); uart_puthex16( htons(pkt->src_port) );
+		uart_puts(" dst_port="); uart_puthex16( htons(pkt->dst_port) );
+		uart_crlf();
+		i = ip->length;
+		if (i > 32)
+			i = 32;
+		uart_dump((u8 *)pkt, i);
+	}
+#endif
 }
 
 /**
