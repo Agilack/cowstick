@@ -106,8 +106,8 @@ static void dhcpd_discover(network *netif, udp_packet *udp, int is_dhcp)
 	dhcp->secs   = 0;
 	dhcp->flags  = 0;
 	dhcp->ciaddr = 0x00000000;
-	dhcp->yiaddr = htonl(0x0A0A0A03);
-	dhcp->siaddr = htonl(0x0A0A0AFE);
+	dhcp->yiaddr = htonl(CFG_IP_REMOTE);
+	dhcp->siaddr = htonl(CFG_IP_LOCAL);
 	dhcp->giaddr = 0x00000000;
 	memset(dhcp->chaddr, 0,  16);
 	memcpy(dhcp->chaddr, pkt->chaddr, dhcp->hlen);
@@ -130,21 +130,21 @@ static void dhcpd_discover(network *netif, udp_packet *udp, int is_dhcp)
 		options[1] = 1;
 		options[2] = 2; /* OFFER */
 		options += 3;
-		/**/
-		options[0] = 51; /* Lease time */
+		/* Lease time */
+		options[0] = 51;
 		options[1] = 4;
-		options[2] = 0;
+		options[2] = 0;  /* 4h */
 		options[3] = 0;
-		options[4] = 0;
-		options[5] = 80;
+		options[4] = 0x38;
+		options[5] = 0x40;
 		options += 6;
 		/* Renewal time */
 		options[0] = 58;
 		options[1] = 4;
-		options[2] = 0;
+		options[2] = 0; /* 2h */
 		options[3] = 0;
-		options[4] = 0;
-		options[5] = 40;
+		options[4] = 0x1C;
+		options[5] = 0x20;
 		options += 6;
 		/* End of options */
 		options[0] = 0xFF;
@@ -184,8 +184,8 @@ static void dhcpd_request(network *netif, udp_packet *udp)
 	dhcp->secs   = 0;
 	dhcp->flags  = 0;
 	dhcp->ciaddr = 0x00000000;
-	dhcp->yiaddr = htonl(0x0A0A0A03);
-	dhcp->siaddr = htonl(0x0A0A0AFE);
+	dhcp->yiaddr = htonl(CFG_IP_REMOTE);
+	dhcp->siaddr = htonl(CFG_IP_LOCAL);
 	dhcp->giaddr = 0x00000000;
 	memset(dhcp->chaddr, 0,  16);
 	memcpy(dhcp->chaddr, pkt->chaddr, dhcp->hlen);
@@ -206,18 +206,18 @@ static void dhcpd_request(network *netif, udp_packet *udp)
 	/* Lease time */
 	options[0] = 51;
 	options[1] = 4;
-	options[2] = 0;
+	options[2] = 0; /* 4h */
 	options[3] = 0;
-	options[4] = 0;
-	options[5] = 80;
+	options[4] = 0x38;
+	options[5] = 0x40;
 	options += 6;
 	/* Renewal time */
 	options[0] = 58;
 	options[1] = 4;
-	options[2] = 0;
+	options[2] = 0; /* 2h */
 	options[3] = 0;
-	options[4] = 0;
-	options[5] = 40;
+	options[4] = 0x1C;
+	options[5] = 0x20;
 	options += 6;
 	/* End of options */
 	options[0] = 0xFF;

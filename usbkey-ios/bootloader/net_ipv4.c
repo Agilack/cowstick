@@ -127,7 +127,7 @@ u8 *ipv4_tx_buffer(network *mod, u32 dest, u8 proto)
 	rsp->ttl    = 0x40;
 	rsp->proto  = proto;
 	rsp->cksum  = 0x0000;
-	rsp->src    = 0xFE0A0A0A; /* equal to htonl(0x0A0A0AFE) */
+	rsp->src    = htonl(CFG_IP_LOCAL);
 	rsp->dst    = htonl(dest);
 	
 	return (((u8 *)rsp) + 20);

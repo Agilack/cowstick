@@ -17,6 +17,15 @@
 #define NET_H
 #include "types.h"
 
+/* Set the local IP address (if not already defined) */
+#ifndef CFG_IP_LOCAL
+#define CFG_IP_LOCAL 0x0A0A0AFE
+#endif
+/* Set the remote IP address (if not already defined) */
+#ifndef CFG_IP_REMOTE
+#define CFG_IP_REMOTE 0x0A0A0A03
+#endif
+
 typedef struct _network
 {
 	u8  *rx_buffer;

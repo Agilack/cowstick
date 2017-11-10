@@ -104,10 +104,14 @@ void net_periodic(network *mod)
 			arp_receive(mod, mod->rx_buffer+14, mod->rx_length-14);
 			break;
 		case 0x86DD:
+#ifdef NET_DBG_IPV6
 			uart_puts("NET: received an IPv6 datagram\r\n");
+#endif
 			break;
+#ifdef NET_DBG
 		default:
 			uart_puts("NET: data received (unknown protocol)\r\n");
+#endif
 	}
 	ecm_rx_prepare(mod->driver);
 }

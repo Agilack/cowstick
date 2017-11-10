@@ -175,7 +175,6 @@ static void cb_xfer(usb_module *mod, u8 ep)
 			break;
 		/* TX */
 		case 0x02:
-			uart_puts("usb_ecm: TX complete\r\n");
 			/* Clear ethernet header */
 			memset(net->tx_buffer, 0, 14);
 	}

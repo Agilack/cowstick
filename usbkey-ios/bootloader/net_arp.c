@@ -49,7 +49,7 @@ void arp_receive(network *mod, u8 *buffer, int length)
 	if (htons(req->op) == 0x0001)
 	{
 		/* Is the requested IP is me ? */
-		if (htonl(req->dst_ip) == 0x0A0A0AFE)
+		if (htonl(req->dst_ip) == CFG_IP_LOCAL)
 		{
 			arp_packet *rsp;
 			
@@ -60,7 +60,7 @@ void arp_receive(network *mod, u8 *buffer, int length)
 			rsp->llen  = 0x04;
 			rsp->op    = 0x0200; /* equal to htons(0x0002) */
 			memcpy(rsp->src_phy, mod->mac, 6);
-			rsp->src_ip= 0xFE0A0A0A; /* equal to htonl(0x0A0A0AFE) */
+			rsp->src_ip= htonl(CFG_IP_LOCAL);
 			memcpy(rsp->dst_phy, req->src_phy, 6);
 			rsp->dst_ip= req->src_ip;
 			
