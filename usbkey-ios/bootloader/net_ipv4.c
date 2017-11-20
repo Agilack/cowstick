@@ -20,6 +20,9 @@
 #include "types.h"
 #include "uart.h"
 
+/* TCP functions */
+static void tcp4_accept (network *netif, tcp_packet *req, int len);
+static void tcp4_receive(network *netif, tcp_packet *pkt, int len);
 /* UDP functions */
 static void udp4_receive(network *mod, udp_packet *pkt, ip_dgram *ip);
 
@@ -68,7 +71,11 @@ void ipv4_receive(network *mod, u8 *buffer, int length)
 			break;
 		}
 		case IP_PROTO_TCP:
-			uart_puts("IPv4: receive a TCP packet\r\n");
+		{
+			tcp_packet *pkt = (tcp_packet *)(buffer + 20);
+			tcp4_receive(mod, pkt, length - 20);
+			break;
+		}
 		default:
 			uart_puts("IPv4:");
 			uart_puts(" src="); uart_puthex( htonl(req->src) );
@@ -176,6 +183,133 @@ u16 ip_cksum(u32 sum, const u8 *data, u16 len)
 	
 	/* Return sum in host byte order. */
 	return (u16)sum;
+}
+
+/* ------------------------------------------------------------------------- */
+/* --                                 TCP                                 -- */
+/* ------------------------------------------------------------------------- */
+
+static void tcp4_accept(network *netif, tcp_packet *req, int len)
+{
+	tcp_packet *rsp;
+	tcp_conn   newconn;
+	ip_dgram *ip;
+	u8  *buffer;
+
+	uart_puts("TCP: ACCEPT\r\n");
+	(void)len;
+
+	ip = (ip_dgram *)(((u8*)req) - 20);
+
+	newconn.ip_remote  = htonl(ip->src);
+	newconn.port_local = htons(req->dst_port);
+	newconn.port_remote= htons(req->src_port);
+	newconn.seq_local  = 0x12345678;
+	newconn.seq_remote = htonl(req->seq) + 1;
+	newconn.state      = TCP_CONN_SYN;
+
+	/* Get the buffer of TX datagram from IPv4 underlayer */
+	buffer = (u8 *)ipv4_tx_buffer(netif, newconn.ip_remote, 0x06);
+
+	rsp = (tcp_packet *)buffer;
+	rsp->src_port = req->dst_port;
+	rsp->dst_port = req->src_port;
+	rsp->ack = htonl( htonl(req->seq) + 1);
+	rsp->offset = 0x50;
+	rsp->flags  = TCP_ACK;
+	rsp->win    = htons(450);
+	rsp->cksum  = 0x0000;
+	rsp->urg    = 0x0000;
+
+	rsp->flags |= TCP_SYN;
+	rsp->seq    = htonl(1);
+
+	newconn.rsp = rsp;
+	tcp4_send(netif, &newconn, 0);
+}
+
+/**
+ * @brief Process incoming TCP packet
+ *
+ * @param netif Pointer to the network interface structure
+ * @param req   Pointer to the received TCP packet
+ * @param len   Length of the received datas
+ */
+static void tcp4_receive(network *netif, tcp_packet *req, int len)
+{
+	uart_puts("TCP: receive\r\n");
+	if (req->flags & TCP_SYN)
+	{
+		tcp4_accept(netif, req, len);
+	}
+	else
+	{
+		int size = len - sizeof(tcp_packet);
+		if (size > 0)
+		{
+			u8 *buffer = (u8 *)req;
+			buffer += sizeof(tcp_packet);
+			uart_dump(buffer, size);
+		}
+	}
+}
+
+/**
+ * @brief Send a TCP packet to a remote host
+ *
+ * @param netif Pointer to the network interface structure
+ * @param conn  Pointer to the TCP connection
+ * @param len   Length of the datas into the packet
+ */
+void tcp4_send(network *netif, tcp_conn *conn, int len)
+{
+	u8 src_addr[4]  = {0x0A,0x0A,0x0A,0xFE};
+	u8 dest_addr[4] = {0x0A,0x0a,0x0a,0x03};
+	u16 *ip_src=(void *)&src_addr;
+	u16 *ip_dst=(void *)&dest_addr;
+	u32 sum = 0;
+	int hlen, tmp_len;
+	tcp_packet *pkt = conn->rsp;
+	u16 *p = (u16 *)pkt;
+
+	uart_puts("TCP: SEND");
+
+	/* Compute the TCP header length */
+	hlen = (pkt->offset >> 2) & 0x3C;
+
+	/* If packet contains datas, include the PUSH flag */
+	if (len > 0)
+		pkt->flags |= TCP_PSH;
+
+	/* Reset checksum value */
+	pkt->cksum = 0x0000;
+
+	/* Sum all values of TCP header and datas */
+	tmp_len = hlen + len;
+	while (tmp_len > 1)
+	{
+		sum += *p++;
+		if (sum & 0x80000000)
+			sum = (sum & 0xFFFF) + (sum >> 16);
+		tmp_len -= 2;
+	}
+	if (tmp_len & 1)
+		sum += *((u8 *)p);
+	/* Add the pseudo-header sum */
+	sum += *(ip_src++);
+	sum += *ip_src;
+	sum += *(ip_dst++);
+	sum += *ip_dst;
+	sum += htons(0x06);
+	sum += htons(hlen + len);
+	/* Add the carries */
+	while (sum >> 16)
+		sum = (sum & 0xFFFF) + (sum >> 16);
+	/* Set the computed checksum into TCP header */
+	pkt->cksum = (u16)(~sum);
+
+	/* Call underlying IP layer to send the packet */
+	ipv4_send(netif, len + sizeof(tcp_packet));
 }
 
 /* ------------------------------------------------------------------------- */
