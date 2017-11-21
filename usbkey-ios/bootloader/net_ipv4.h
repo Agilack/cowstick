@@ -72,6 +72,9 @@ typedef struct __attribute__((packed))
 #define TCP_CONN_CLOSED      0
 #define TCP_CONN_SYN         1
 #define TCP_CONN_ESTABLISHED 2
+#define TCP_CONN_CLOSE_WAIT  3
+#define TCP_CONN_FIN_WAIT_1  4
+#define TCP_CONN_CLOSING     5
 
 typedef struct _tcp_conn
 {

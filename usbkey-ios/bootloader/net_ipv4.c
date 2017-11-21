@@ -22,6 +22,7 @@
 
 /* TCP functions */
 static void tcp4_accept (network *netif, tcp_packet *req);
+static tcp_packet *tcp4_prepare(network *netif, tcp_conn *conn);
 static void tcp4_receive(network *netif, tcp_packet *pkt, int len);
 /* UDP functions */
 static void udp4_receive(network *mod, udp_packet *pkt, ip_dgram *ip);
@@ -210,8 +211,6 @@ static void tcp4_accept(network *netif, tcp_packet *req)
 	u8  *buffer;
 	int i;
 
-	uart_puts("TCP: ACCEPT\r\n");
-
 	ip = (ip_dgram *)(((u8*)req) - 20);
 
 	/* Create a new TCP connection for this network interface */
@@ -267,6 +266,32 @@ send:
 }
 
 /**
+ * @brief Start a close sequence, initiated by local side of connection
+ *
+ * @param netif Pointer to the network interface structure
+ * @param conn  Pointer to the TCP connection to close
+ */
+void tcp4_close(network *netif, tcp_conn *conn)
+{
+	tcp_packet *rsp = 0;
+
+	/* Sanity check */
+	if ( (netif == 0) || (conn == 0) )
+		return;
+
+	/* TODO: Wait for TX buffer ready/empty */
+
+	rsp = tcp4_prepare(netif, conn);
+	rsp->flags |= TCP_ACK | TCP_FIN;
+	rsp->seq    = htonl(conn->seq_local);
+	rsp->ack    = htonl(conn->seq_remote);
+	/* Set the connection into CLOSE_WAIT state */
+	conn->state = TCP_CONN_FIN_WAIT_1;
+	/* Send response */
+	tcp4_send(netif, conn, 0);
+}
+
+/**
  * @brief Search if a packet is for an existing connection (from cache)
  *
  * @param netif Pointer to the network interface structure
@@ -304,6 +329,42 @@ static tcp_conn *tcp4_find(network *netif, tcp_packet *pkt)
 }
 
 /**
+ * @brief Prepare a buffer for a TX packet
+ *
+ * @param netif Pointer to the network interface structure
+ * @param conn  Pointer to the associated TCP connection
+ * @return Pointer to the prepared TCP packet (or NULL in case of error)
+ */
+static tcp_packet *tcp4_prepare(network *netif, tcp_conn *conn)
+{
+	tcp_packet *rsp;
+
+	/* Sanity check */
+	if (conn == 0)
+		return(0);
+
+	rsp = (tcp_packet *)ipv4_tx_buffer(netif, conn->ip_remote, 0x06);
+	rsp->src_port = 0;
+	rsp->dst_port = 0;
+	rsp->ack      = 0;
+	rsp->offset   = 0x50;
+	rsp->flags    = 0;
+	rsp->win      = htons(256);
+	rsp->cksum    = 0x0000;
+	rsp->urg      = 0x0000;
+
+	rsp->flags |= TCP_ACK;
+	rsp->src_port = htons(conn->port_local);
+	rsp->dst_port = htons(conn->port_remote);
+	rsp->ack      = htonl(conn->seq_remote);
+	rsp->seq      = htonl(conn->seq_local);
+
+	conn->rsp = rsp;
+
+	return rsp;
+}
+
+/**
  * @brief Process incoming TCP packet
  *
  * @param netif Pointer to the network interface structure
@@ -315,17 +376,55 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 	tcp_packet *rsp = 0;
 	tcp_conn   *conn;
 
-	uart_puts("TCP: receive\r\n");
-
 	/* Search if the received packet refers to a known socket */
 	conn = tcp4_find(netif, req);
-	if ((conn != 0) && (conn->state == TCP_CONN_SYN))
+
+	if ((conn != 0) && ( (conn->state == TCP_CONN_CLOSE_WAIT) ||
+	                     (conn->state == TCP_CONN_CLOSING)))
+	{
+		if (req->flags & TCP_ACK)
+		{
+			uart_puts("TCP4: Connection closed\r\n");
+			conn->ip_remote = 0;
+			conn->state = TCP_CONN_CLOSED;
+		}
+	}
+	else if ((conn != 0) && (conn->state == TCP_CONN_SYN))
 	{
 		if (req->flags & TCP_ACK)
 		{
 			uart_puts("TCP4: Connection established\r\n");
 			conn->seq_local = htonl(req->ack);
 			conn->state = TCP_CONN_ESTABLISHED;
+		}
+	}
+	else if ((conn != 0) && (conn->state == TCP_CONN_FIN_WAIT_1))
+	{
+		/* If the received packet contains a ACK value */
+		if (req->flags & TCP_ACK)
+			/* Save it ! Note : Big security issue, but we assume to trust this link */
+			conn->seq_local = htonl(req->ack);
+
+		/* Update the (remote) sequence number */
+		conn->seq_remote = htonl(req->seq);
+		conn->seq_remote += 1;
+
+		if (req->flags & TCP_FIN)
+		{
+			rsp = tcp4_prepare(netif, conn);
+			rsp->flags |= TCP_ACK;
+			rsp->seq    = htonl(conn->seq_local);
+			rsp->ack    = htonl(conn->seq_remote);
+			/* Set the connection into CLOSE_WAIT state */
+			conn->state = TCP_CONN_CLOSING;
+			/* Send response */
+			tcp4_send(netif, conn, 0);
+
+			/* TODO: Wait for TX buffer ready/empty */
+
+			uart_puts("TCP4: Connection closed\r\n");
+			conn->ip_remote = 0;
+			conn->state = TCP_CONN_CLOSED;
 		}
 	}
 	/* Data packet received for a known connection */
@@ -338,7 +437,20 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 		/* Compute data length */
 		dlen = len - hlen;
 
+		/* If the received packet contains a ACK value */
+		if (req->flags & TCP_ACK)
+		{
+			/* Save it ! Note : Big security issue, but we assume to trust this link */
+			conn->seq_local = htonl(req->ack);
+		}
+
 		if (dlen > 0)
+		{
+			u8 *buffer = (u8 *)req + hlen;
+			uart_dump(buffer, dlen);
+		}
+
+		if  ( (dlen > 0) || (req->flags & TCP_FIN) )
 		{
 			/* Update the (remote) sequence number */
 			conn->seq_remote = htonl(req->seq);
@@ -348,23 +460,16 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 			else
 				conn->seq_remote += dlen;
 
-			rsp = (tcp_packet *)ipv4_tx_buffer(netif, conn->ip_remote, 0x06);
-			rsp->src_port = 0;
-			rsp->dst_port = 0;
-			rsp->ack      = 0;
-			rsp->offset   = 0x50;
-			rsp->flags    = 0;
-			rsp->win      = htons(256);
-			rsp->cksum    = 0x0000;
-			rsp->urg      = 0x0000;
+			rsp = tcp4_prepare(netif, conn);
 
-			rsp->flags |= TCP_ACK;
-			rsp->src_port = htons(conn->port_local);
-			rsp->dst_port = htons(conn->port_remote);
-			rsp->ack      = htonl(conn->seq_remote);
-			rsp->seq      = htonl(conn->seq_local);
-
-			conn->rsp = rsp;
+			if (req->flags & 0x01)
+			{
+				rsp->flags |= TCP_ACK | TCP_FIN;
+				rsp->seq    = htonl(conn->seq_local);
+				rsp->ack    = htonl(conn->seq_remote);
+				/* Set the connection into CLOSE_WAIT state */
+				conn->state = TCP_CONN_CLOSE_WAIT;
+			}
 
 			/* Send response */
 			tcp4_send(netif, conn, 0);
