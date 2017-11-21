@@ -58,8 +58,6 @@ u16  htons(u16 v)
  */
 void net_init(network *mod)
 {
-	/* Clean interface structure */
-	memset(mod, 0, sizeof(network));
 	/* Set the default MAC address for the interface */
 	memcpy(mod->mac, cfg_mac, 6);
 

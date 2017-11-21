@@ -69,7 +69,9 @@ typedef struct __attribute__((packed))
 	u16 urg;
 } tcp_packet;
 
+#define TCP_CONN_CLOSED      0
 #define TCP_CONN_SYN         1
+#define TCP_CONN_ESTABLISHED 2
 
 typedef struct _tcp_conn
 {

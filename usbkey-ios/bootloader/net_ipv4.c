@@ -21,7 +21,7 @@
 #include "uart.h"
 
 /* TCP functions */
-static void tcp4_accept (network *netif, tcp_packet *req, int len);
+static void tcp4_accept (network *netif, tcp_packet *req);
 static void tcp4_receive(network *netif, tcp_packet *pkt, int len);
 /* UDP functions */
 static void udp4_receive(network *mod, udp_packet *pkt, ip_dgram *ip);
@@ -33,7 +33,13 @@ static void udp4_receive(network *mod, udp_packet *pkt, ip_dgram *ip);
  */
 void ipv4_init(network *mod)
 {
-	(void)mod;
+	int i;
+
+	for (i = 0; i < mod->tcp.conn_count; i++)
+	{
+		mod->tcp.conns[i].ip_remote = 0;
+		mod->tcp.conns[i].state     = TCP_CONN_CLOSED;
+	}
 }
 
 /**
@@ -189,27 +195,47 @@ u16 ip_cksum(u32 sum, const u8 *data, u16 len)
 /* --                                 TCP                                 -- */
 /* ------------------------------------------------------------------------- */
 
-static void tcp4_accept(network *netif, tcp_packet *req, int len)
+/**
+ * @brief Establish a new connection for a received request (accept)
+ *
+ * @param netif Pointer to the network interface structure
+ * @param req   Pointer to the received TCP packet
+ */
+static void tcp4_accept(network *netif, tcp_packet *req)
 {
 	tcp_packet *rsp;
-	tcp_conn   newconn;
+	tcp_conn   *newconn = 0;
+	tcp_conn   tmpconn;
 	ip_dgram *ip;
 	u8  *buffer;
+	int i;
 
 	uart_puts("TCP: ACCEPT\r\n");
-	(void)len;
 
 	ip = (ip_dgram *)(((u8*)req) - 20);
 
-	newconn.ip_remote  = htonl(ip->src);
-	newconn.port_local = htons(req->dst_port);
-	newconn.port_remote= htons(req->src_port);
-	newconn.seq_local  = 0x12345678;
-	newconn.seq_remote = htonl(req->seq) + 1;
-	newconn.state      = TCP_CONN_SYN;
+	/* Create a new TCP connection for this network interface */
+	for (i = 0; i < netif->tcp.conn_count; i++)
+	{
+		/* If the current slot is already configured, continue search */
+		if (netif->tcp.conns[i].ip_remote != 0x00000000)
+			continue;
+		/* Select current array item for new connection */
+		newconn = &netif->tcp.conns[i];
+
+		/* Configure new connection */
+		newconn->ip_remote  = htonl(ip->src);
+		newconn->port_local = htons(req->dst_port);
+		newconn->port_remote= htons(req->src_port);
+		newconn->seq_local  = 0x12345678;
+		newconn->seq_remote = htonl(req->seq) + 1;
+		newconn->state      = TCP_CONN_SYN;
+
+		break;
+	}
 
 	/* Get the buffer of TX datagram from IPv4 underlayer */
-	buffer = (u8 *)ipv4_tx_buffer(netif, newconn.ip_remote, 0x06);
+	buffer = (u8 *)ipv4_tx_buffer(netif, htonl(ip->src), 0x06);
 
 	rsp = (tcp_packet *)buffer;
 	rsp->src_port = req->dst_port;
@@ -221,11 +247,60 @@ static void tcp4_accept(network *netif, tcp_packet *req, int len)
 	rsp->cksum  = 0x0000;
 	rsp->urg    = 0x0000;
 
-	rsp->flags |= TCP_SYN;
-	rsp->seq    = htonl(1);
+	if (newconn == 0)
+		goto reject;
 
-	newconn.rsp = rsp;
-	tcp4_send(netif, &newconn, 0);
+	rsp->flags |= TCP_SYN;
+	rsp->seq    = htonl(newconn->seq_local);
+	goto send;
+
+reject:
+	memset(&tmpconn, 0, sizeof(tcp_conn));
+	newconn = &tmpconn;
+	uart_puts(" * REJECT\r\n");
+	rsp->flags |= TCP_RST;
+	rsp->seq    = 0x00000000;
+
+send:
+	newconn->rsp = rsp;
+	tcp4_send(netif, newconn, 0);
+}
+
+/**
+ * @brief Search if a packet is for an existing connection (from cache)
+ *
+ * @param netif Pointer to the network interface structure
+ * @param pkt   Pointer to the received packet
+ * @return Pointer to the TCP connection structure, or NULL if not found
+ */
+static tcp_conn *tcp4_find(network *netif, tcp_packet *pkt)
+{
+	tcp_conn *result = 0;
+	u16 req_rem_port;
+	u16 req_loc_port;
+	int i;
+
+	req_rem_port = htons(pkt->src_port);
+	req_loc_port = htons(pkt->dst_port);
+
+	for (i = 0; i < netif->tcp.conn_count; i++)
+	{
+		/* Use IP field to test if an entry is filled or empty */
+		if (netif->tcp.conns[i].ip_remote == 0x00000000)
+			continue;
+		/* Test local port number field */
+		if (netif->tcp.conns[i].port_local != req_loc_port)
+			continue;
+		/* Test remote port number field */
+		if (netif->tcp.conns[i].port_remote != req_rem_port)
+			continue;
+
+		// ToDo : check IP
+
+		result = &netif->tcp.conns[i];
+		break;
+	}
+	return result;
 }
 
 /**
@@ -237,10 +312,67 @@ static void tcp4_accept(network *netif, tcp_packet *req, int len)
  */
 static void tcp4_receive(network *netif, tcp_packet *req, int len)
 {
+	tcp_packet *rsp = 0;
+	tcp_conn   *conn;
+
 	uart_puts("TCP: receive\r\n");
-	if (req->flags & TCP_SYN)
+
+	/* Search if the received packet refers to a known socket */
+	conn = tcp4_find(netif, req);
+	if ((conn != 0) && (conn->state == TCP_CONN_SYN))
 	{
-		tcp4_accept(netif, req, len);
+		if (req->flags & TCP_ACK)
+		{
+			uart_puts("TCP4: Connection established\r\n");
+			conn->seq_local = htonl(req->ack);
+			conn->state = TCP_CONN_ESTABLISHED;
+		}
+	}
+	/* Data packet received for a known connection */
+	else if (conn != 0)
+	{
+		int dlen, hlen;
+
+		/* Compute TCP header length */
+		hlen = ((req->offset >> 2) & 0x3C);
+		/* Compute data length */
+		dlen = len - hlen;
+
+		if (dlen > 0)
+		{
+			/* Update the (remote) sequence number */
+			conn->seq_remote = htonl(req->seq);
+			/* Update sequence number (remote) */
+			if (dlen == 0)
+				conn->seq_remote += 1;
+			else
+				conn->seq_remote += dlen;
+
+			rsp = (tcp_packet *)ipv4_tx_buffer(netif, conn->ip_remote, 0x06);
+			rsp->src_port = 0;
+			rsp->dst_port = 0;
+			rsp->ack      = 0;
+			rsp->offset   = 0x50;
+			rsp->flags    = 0;
+			rsp->win      = htons(256);
+			rsp->cksum    = 0x0000;
+			rsp->urg      = 0x0000;
+
+			rsp->flags |= TCP_ACK;
+			rsp->src_port = htons(conn->port_local);
+			rsp->dst_port = htons(conn->port_remote);
+			rsp->ack      = htonl(conn->seq_remote);
+			rsp->seq      = htonl(conn->seq_local);
+
+			conn->rsp = rsp;
+
+			/* Send response */
+			tcp4_send(netif, conn, 0);
+		}
+	}
+	else if (req->flags & TCP_SYN)
+	{
+		tcp4_accept(netif, req);
 	}
 	else
 	{
@@ -271,8 +403,6 @@ void tcp4_send(network *netif, tcp_conn *conn, int len)
 	int hlen, tmp_len;
 	tcp_packet *pkt = conn->rsp;
 	u16 *p = (u16 *)pkt;
-
-	uart_puts("TCP: SEND");
 
 	/* Compute the TCP header length */
 	hlen = (pkt->offset >> 2) & 0x3C;

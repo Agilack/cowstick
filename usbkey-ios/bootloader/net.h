@@ -37,6 +37,12 @@ typedef struct _network
 	void *driver;
 	/* MAC address of the interface */
 	u8    mac[6];
+	/* Extension for TCP */
+	struct
+	{
+		struct _tcp_conn *conns;
+		int    conn_count;
+	} tcp;
 } network;
 
 typedef struct __attribute__((packed))

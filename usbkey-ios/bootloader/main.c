@@ -16,6 +16,7 @@
 #include "hardware.h"
 #include "libc.h"
 #include "net.h"
+#include "net_ipv4.h"
 #include "uart.h"
 #include "usb.h"
 #include "usb_ecm.h"
@@ -76,6 +77,8 @@ u8       bl_net_tx_buffer[512];
  */
 static void bootloader(void)
 {
+	tcp_conn bl_tcp_conns[2];
+
 	/* Initialize UART debug port */
 	uart_init();
 	/* Initialize USB stack */
@@ -83,6 +86,9 @@ static void bootloader(void)
 
 	uart_puts("--=={ Cowstick Bootloader }==--\r\n");
 
+	/* Init TCP connections */
+	bl_net_cfg.tcp.conns = &bl_tcp_conns[0];
+	bl_net_cfg.tcp.conn_count = 2;
 	/* Initialize network interface */
 	net_init(&bl_net_cfg);
 	/* Configure network interface : set RX/TX buffers */
