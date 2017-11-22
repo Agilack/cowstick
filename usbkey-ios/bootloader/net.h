@@ -42,6 +42,8 @@ typedef struct _network
 	{
 		struct _tcp_conn *conns;
 		int    conn_count;
+		struct _tcp_service *services;
+		int    service_count;
 	} tcp;
 } network;
 

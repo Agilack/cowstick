@@ -40,6 +40,7 @@ void ipv4_init(network *mod)
 	{
 		mod->tcp.conns[i].ip_remote = 0;
 		mod->tcp.conns[i].state     = TCP_CONN_CLOSED;
+		mod->tcp.conns[i].process   = 0;
 	}
 }
 
@@ -229,6 +230,7 @@ static void tcp4_accept(network *netif, tcp_packet *req)
 		newconn->seq_local  = 0x12345678;
 		newconn->seq_remote = htonl(req->seq) + 1;
 		newconn->state      = TCP_CONN_SYN;
+		newconn->process    = 0;
 
 		break;
 	}
@@ -248,6 +250,30 @@ static void tcp4_accept(network *netif, tcp_packet *req)
 
 	if (newconn == 0)
 		goto reject;
+
+	/* Search a service for the requested target port */
+	for (i = 0; i < netif->tcp.service_count; i++)
+	{
+		if (htons(req->dst_port) != netif->tcp.services[i].port)
+			continue;
+		newconn->process =  netif->tcp.services[i].process;
+		newconn->service = &netif->tcp.services[i];
+		break;
+	}
+	/* If no service found ... reject the request */
+	if (newconn->process == 0)
+		goto reject;
+
+	if (newconn->service->accept != 0)
+		newconn->service->accept(newconn);
+	else
+	{
+		uart_puts(" * ACCEPT from=");
+		uart_puthex(newconn->ip_remote);
+		uart_puts(" local port=");  uart_puthex16(newconn->port_local);
+		uart_puts(" remote port="); uart_puthex16(newconn->port_remote);
+		uart_crlf();
+	}
 
 	rsp->flags |= TCP_SYN;
 	rsp->seq    = htonl(newconn->seq_local);
@@ -444,12 +470,6 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 			conn->seq_local = htonl(req->ack);
 		}
 
-		if (dlen > 0)
-		{
-			u8 *buffer = (u8 *)req + hlen;
-			uart_dump(buffer, dlen);
-		}
-
 		if  ( (dlen > 0) || (req->flags & TCP_FIN) )
 		{
 			/* Update the (remote) sequence number */
@@ -473,6 +493,15 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 
 			/* Send response */
 			tcp4_send(netif, conn, 0);
+		}
+		/* If the packet contains data, call application callback */
+		if ( dlen > 0)
+		{
+			u8 *buffer = (u8 *)req + hlen;
+			conn->req = req;
+			conn->rsp = 0;
+			conn->process(conn, buffer + hlen, dlen);
+			conn->req = 0;
 		}
 	}
 	else if (req->flags & TCP_SYN)

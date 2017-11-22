@@ -29,6 +29,9 @@ usb_module usbmod;
 usb_class  ecm_class;
 u8 ep1[64];
 
+static int echo_accept(tcp_conn *conn);
+static int echo_process(tcp_conn *conn, u8 *data, int len);
+
 /**
  * @brief Entry point of the bootloader
  *
@@ -77,7 +80,8 @@ u8       bl_net_tx_buffer[512];
  */
 static void bootloader(void)
 {
-	tcp_conn bl_tcp_conns[2];
+	tcp_conn    bl_tcp_conns[2];
+	tcp_service bl_tcp_services;
 
 	/* Initialize UART debug port */
 	uart_init();
@@ -86,9 +90,18 @@ static void bootloader(void)
 
 	uart_puts("--=={ Cowstick Bootloader }==--\r\n");
 
+	/* DEBUG: Dummy service used to test TCP layer */
+	bl_tcp_services.port    = 1234;
+	bl_tcp_services.accept  = echo_accept;
+	bl_tcp_services.process = echo_process;
+	bl_tcp_services.priv    = 0;
+
 	/* Init TCP connections */
 	bl_net_cfg.tcp.conns = &bl_tcp_conns[0];
 	bl_net_cfg.tcp.conn_count = 2;
+	/* Init TCP services */
+	bl_net_cfg.tcp.services = &bl_tcp_services;
+	bl_net_cfg.tcp.service_count = 1;
 	/* Initialize network interface */
 	net_init(&bl_net_cfg);
 	/* Configure network interface : set RX/TX buffers */
@@ -125,6 +138,26 @@ static void bootloader(void)
 void USB_Handler(void)
 {
 	usb_irq(&usbmod);
+}
+
+static int echo_accept(tcp_conn *conn)
+{
+	(void)conn;
+
+	uart_puts("Dummy service ECHO - Accept\r\n");
+
+	return 0;
+}
+static int echo_process(tcp_conn *conn, u8 *data, int len)
+{
+	(void)conn;
+	(void) data;
+	(void)len;
+
+	uart_puts("Dummy service ECHO - Recv\r\n");
+	uart_dump(data, len);
+
+	return 0;
 }
 
 /* EOF */
