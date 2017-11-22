@@ -230,6 +230,7 @@ static void tcp4_accept(network *netif, tcp_packet *req)
 		newconn->seq_local  = 0x12345678;
 		newconn->seq_remote = htonl(req->seq) + 1;
 		newconn->state      = TCP_CONN_SYN;
+		newconn->netif      = netif;
 		newconn->process    = 0;
 
 		break;
@@ -282,27 +283,33 @@ static void tcp4_accept(network *netif, tcp_packet *req)
 reject:
 	memset(&tmpconn, 0, sizeof(tcp_conn));
 	newconn = &tmpconn;
+	newconn->netif = netif;
 	uart_puts(" * REJECT\r\n");
 	rsp->flags |= TCP_RST;
 	rsp->seq    = 0x00000000;
 
 send:
 	newconn->rsp = rsp;
-	tcp4_send(netif, newconn, 0);
+	tcp4_send(newconn, 0);
 }
 
 /**
  * @brief Start a close sequence, initiated by local side of connection
  *
- * @param netif Pointer to the network interface structure
  * @param conn  Pointer to the TCP connection to close
  */
-void tcp4_close(network *netif, tcp_conn *conn)
+void tcp4_close(tcp_conn *conn)
 {
-	tcp_packet *rsp = 0;
+	network    *netif = 0;
+	tcp_packet *rsp   = 0;
 
 	/* Sanity check */
-	if ( (netif == 0) || (conn == 0) )
+	if (conn == 0)
+		return;
+
+	/* Get associated network interface */
+	netif = conn->netif;
+	if (netif == 0)
 		return;
 
 	/* TODO: Wait for TX buffer ready/empty */
@@ -314,7 +321,7 @@ void tcp4_close(network *netif, tcp_conn *conn)
 	/* Set the connection into CLOSE_WAIT state */
 	conn->state = TCP_CONN_FIN_WAIT_1;
 	/* Send response */
-	tcp4_send(netif, conn, 0);
+	tcp4_send(conn, 0);
 }
 
 /**
@@ -444,7 +451,7 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 			/* Set the connection into CLOSE_WAIT state */
 			conn->state = TCP_CONN_CLOSING;
 			/* Send response */
-			tcp4_send(netif, conn, 0);
+			tcp4_send(conn, 0);
 
 			/* TODO: Wait for TX buffer ready/empty */
 
@@ -492,7 +499,7 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 			}
 
 			/* Send response */
-			tcp4_send(netif, conn, 0);
+			tcp4_send(conn, 0);
 		}
 		/* If the packet contains data, call application callback */
 		if ( dlen > 0)
@@ -500,7 +507,7 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 			u8 *buffer = (u8 *)req + hlen;
 			conn->req = req;
 			conn->rsp = 0;
-			conn->process(conn, buffer + hlen, dlen);
+			conn->process(conn, buffer, dlen);
 			conn->req = 0;
 		}
 	}
@@ -523,12 +530,12 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 /**
  * @brief Send a TCP packet to a remote host
  *
- * @param netif Pointer to the network interface structure
  * @param conn  Pointer to the TCP connection
  * @param len   Length of the datas into the packet
  */
-void tcp4_send(network *netif, tcp_conn *conn, int len)
+void tcp4_send(tcp_conn *conn, int len)
 {
+	network *netif;
 	u8 src_addr[4]  = {0x0A,0x0A,0x0A,0xFE};
 	u8 dest_addr[4] = {0x0A,0x0a,0x0a,0x03};
 	u16 *ip_src=(void *)&src_addr;
@@ -537,6 +544,11 @@ void tcp4_send(network *netif, tcp_conn *conn, int len)
 	int hlen, tmp_len;
 	tcp_packet *pkt = conn->rsp;
 	u16 *p = (u16 *)pkt;
+
+	if (conn == 0)
+		return;
+
+	netif = conn->netif;
 
 	/* Compute the TCP header length */
 	hlen = (pkt->offset >> 2) & 0x3C;

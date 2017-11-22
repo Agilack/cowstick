@@ -86,6 +86,7 @@ typedef struct _tcp_conn
 	u8  state;
 	tcp_packet *req;
 	tcp_packet *rsp;
+	struct _network  *netif;
 	struct _tcp_service *service;
 	int (*process)(struct _tcp_conn *conn, u8 *data, int len);
 } tcp_conn;
@@ -98,8 +99,8 @@ typedef struct _tcp_service
 	void *priv;
 } tcp_service;
 
-void tcp4_close(network *netif, tcp_conn *conn);
-void tcp4_send (network *netif, tcp_conn *conn, int len);
+void tcp4_close(tcp_conn *conn);
+void tcp4_send (tcp_conn *conn, int len);
 
 /* -------------------------------------------------------------------------- */
 /*                                    UDP                                     */

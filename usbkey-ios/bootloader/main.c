@@ -150,12 +150,14 @@ static int echo_accept(tcp_conn *conn)
 }
 static int echo_process(tcp_conn *conn, u8 *data, int len)
 {
-	(void)conn;
-	(void) data;
-	(void)len;
-
 	uart_puts("Dummy service ECHO - Recv\r\n");
 	uart_dump(data, len);
+
+	if (data[0] == 'q')
+	{
+		uart_puts("Echo quit\r\n");
+		tcp4_close(conn);
+	}
 
 	return 0;
 }
