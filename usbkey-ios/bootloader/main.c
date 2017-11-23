@@ -155,8 +155,20 @@ static int echo_process(tcp_conn *conn, u8 *data, int len)
 
 	if (data[0] == 'q')
 	{
+		u8 *buffer = tcp4_tx_buffer(conn);
+
+		memcpy(buffer, "Bye !\r\n\0", 8);
+		tcp4_send(conn, 8);
+
 		uart_puts("Echo quit\r\n");
 		tcp4_close(conn);
+	}
+	else
+	{
+		u8 *buffer = tcp4_tx_buffer(conn);
+
+		memcpy(buffer, "Echo> \0", 7);
+		tcp4_send(conn, 7);
 	}
 
 	return 0;

@@ -101,6 +101,7 @@ typedef struct _tcp_service
 
 void tcp4_close(tcp_conn *conn);
 void tcp4_send (tcp_conn *conn, int len);
+u8  *tcp4_tx_buffer(tcp_conn *conn);
 
 /* -------------------------------------------------------------------------- */
 /*                                    UDP                                     */

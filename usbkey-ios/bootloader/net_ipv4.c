@@ -22,8 +22,9 @@
 
 /* TCP functions */
 static void tcp4_accept (network *netif, tcp_packet *req);
-static tcp_packet *tcp4_prepare(network *netif, tcp_conn *conn);
+static tcp_packet *tcp4_prepare(tcp_conn *conn);
 static void tcp4_receive(network *netif, tcp_packet *pkt, int len);
+static void tcp4_tx_wait(tcp_conn *conn);
 /* UDP functions */
 static void udp4_receive(network *mod, udp_packet *pkt, ip_dgram *ip);
 
@@ -284,7 +285,6 @@ reject:
 	memset(&tmpconn, 0, sizeof(tcp_conn));
 	newconn = &tmpconn;
 	newconn->netif = netif;
-	uart_puts(" * REJECT\r\n");
 	rsp->flags |= TCP_RST;
 	rsp->seq    = 0x00000000;
 
@@ -312,9 +312,9 @@ void tcp4_close(tcp_conn *conn)
 	if (netif == 0)
 		return;
 
-	/* TODO: Wait for TX buffer ready/empty */
+	tcp4_tx_wait(conn);
 
-	rsp = tcp4_prepare(netif, conn);
+	rsp = tcp4_prepare(conn);
 	rsp->flags |= TCP_ACK | TCP_FIN;
 	rsp->seq    = htonl(conn->seq_local);
 	rsp->ack    = htonl(conn->seq_remote);
@@ -368,13 +368,18 @@ static tcp_conn *tcp4_find(network *netif, tcp_packet *pkt)
  * @param conn  Pointer to the associated TCP connection
  * @return Pointer to the prepared TCP packet (or NULL in case of error)
  */
-static tcp_packet *tcp4_prepare(network *netif, tcp_conn *conn)
+static tcp_packet *tcp4_prepare(tcp_conn *conn)
 {
+	network    *netif;
 	tcp_packet *rsp;
 
 	/* Sanity check */
 	if (conn == 0)
 		return(0);
+
+	netif = conn->netif;
+
+	tcp4_tx_wait(conn);
 
 	rsp = (tcp_packet *)ipv4_tx_buffer(netif, conn->ip_remote, 0x06);
 	rsp->src_port = 0;
@@ -444,7 +449,7 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 
 		if (req->flags & TCP_FIN)
 		{
-			rsp = tcp4_prepare(netif, conn);
+			rsp = tcp4_prepare(conn);
 			rsp->flags |= TCP_ACK;
 			rsp->seq    = htonl(conn->seq_local);
 			rsp->ack    = htonl(conn->seq_remote);
@@ -453,7 +458,7 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 			/* Send response */
 			tcp4_send(conn, 0);
 
-			/* TODO: Wait for TX buffer ready/empty */
+			tcp4_tx_wait(conn);
 
 			uart_puts("TCP4: Connection closed\r\n");
 			conn->ip_remote = 0;
@@ -487,7 +492,7 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 			else
 				conn->seq_remote += dlen;
 
-			rsp = tcp4_prepare(netif, conn);
+			rsp = tcp4_prepare(conn);
 
 			if (req->flags & 0x01)
 			{
@@ -500,6 +505,9 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 
 			/* Send response */
 			tcp4_send(conn, 0);
+
+			/* Wait end of transmit */
+			tcp4_tx_wait(conn);
 		}
 		/* If the packet contains data, call application callback */
 		if ( dlen > 0)
@@ -586,6 +594,63 @@ void tcp4_send(tcp_conn *conn, int len)
 
 	/* Call underlying IP layer to send the packet */
 	ipv4_send(netif, len + sizeof(tcp_packet));
+
+	/* Reset rsp pointer after sending packet */
+	conn->rsp = 0;
+	/* Update sequence number */
+	conn->seq_local += len;
+}
+
+/**
+ * @brief Get a buffer for datas to be sent
+ *
+ * @param conn Pointer to a TCP connection (optional)
+ * @return Pointer to the allocated buffer
+ */
+u8 *tcp4_tx_buffer(tcp_conn *conn)
+{
+	tcp_packet *rsp;
+	int  hlen;
+	u8  *data;
+
+	/* Sanity check */
+	if (conn == 0)
+		return (0);
+
+	if (conn->rsp != 0)
+		rsp = conn->rsp;
+	else
+	{
+		rsp = tcp4_prepare(conn);
+		// Save it into connection structure
+		conn->rsp = rsp;
+	}
+
+	hlen = ( (rsp->offset >> 2) & 0x3C );
+	data = ((u8*)rsp) + hlen;
+
+	return data;
+}
+
+/**
+ * @brief Test if TX buffer is ready for new packet, and wait if not empty
+ *
+ * @param conn Pointer to the TCP connection
+ */
+static void tcp4_tx_wait(tcp_conn *conn)
+{
+	network  *netif = conn->netif;
+	volatile eth_frame *eth;
+	u8 *dgram;
+
+	/* Get pointer to current TX datagram */
+	dgram = (u8 *)net_tx_buffer(netif, 0);
+	/* Get the associated ethernet frame */
+	eth   = (eth_frame *)(dgram - 14);
+
+	/* Field 'proto' is cleared by USB ECM when frame sent */
+	while (eth->proto != 0x0000)
+		;
 }
 
 /* ------------------------------------------------------------------------- */
