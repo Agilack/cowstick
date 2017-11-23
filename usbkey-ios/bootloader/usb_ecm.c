@@ -18,6 +18,7 @@
 #include "usb.h"
 #include "uart.h"
 #include "net.h"
+#include "usb_ecm.h"
 
 static void cb_enable(usb_module *mod);
 static void cb_setup (usb_module *mod);
@@ -52,7 +53,7 @@ void ecm_rx_prepare(usb_module *mod)
 	/* Sanity check : a network interface must been attached to the ECM */
 	if ((mod->class == 0) || (mod->class->priv == 0))
 	{
-		uart_puts("esb_ecm: RX prepare fails, no network intferface\r\n");
+		ECM_PUTS("esb_ecm: RX prepare fails, no network intferface\r\n");
 		return;
 	}
 
@@ -62,7 +63,7 @@ void ecm_rx_prepare(usb_module *mod)
 	/* Sanity check : interface must have an RX buffer */
 	if (net->rx_buffer == 0)
 	{
-		uart_puts("usb_ecm: RX prepare fails, no buffer\r\n");
+		ECM_PUTS("usb_ecm: RX prepare fails, no buffer\r\n");
 		return;
 	}
 
@@ -107,7 +108,7 @@ void cb_enable(usb_module *mod)
 	/* Sanity check : a network interface must been attached to the ECM */
 	if ((mod->class == 0) || (mod->class->priv == 0))
 	{
-		uart_puts("esb_ecm: Enable error, no network intferface\r\n");
+		ECM_PUTS("esb_ecm: Enable error, no network intferface\r\n");
 		return;
 	}
 
@@ -119,7 +120,7 @@ void cb_enable(usb_module *mod)
 	if (rx_buffer)
 		usb_transfer(mod, 1, rx_buffer, 512);
 	else
-		uart_puts("usb_ecm: Enable error, no RX buffer\r\n");
+		ECM_PUTS("usb_ecm: Enable error, no RX buffer\r\n");
 }
 
 /**
@@ -159,7 +160,7 @@ static void cb_xfer(usb_module *mod, u8 ep)
 
 	if ((mod->class == 0) || (mod->class->priv == 0))
 	{
-		uart_puts("usb_ecn: ERROR, no network interface\r\n");
+		ECM_PUTS("usb_ecn: ERROR, no network interface\r\n");
 		return;
 	}
 

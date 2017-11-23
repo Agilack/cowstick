@@ -60,7 +60,7 @@ void ipv4_receive(network *mod, u8 *buffer, int length)
 	/* Sanity check */
 	if ((mod == 0) || (buffer == 0))
 	{
-		uart_puts("IPv4: Missing parameter for receive function\r\n");
+		NET_PUTS("IPv4: Missing parameter for receive function\r\n");
 		return;
 	}
 
@@ -68,7 +68,7 @@ void ipv4_receive(network *mod, u8 *buffer, int length)
 	switch (req->proto)
 	{
 		case IP_PROTO_ICMP:
-			uart_puts("IPv4: receive an ICMP packet\r\n");
+			NET_PUTS("IPv4: receive an ICMP packet\r\n");
 			break;
 		case IP_PROTO_IGMP:
 			/* Not used yet */
@@ -86,11 +86,14 @@ void ipv4_receive(network *mod, u8 *buffer, int length)
 			break;
 		}
 		default:
+#ifdef DEBUG_NET
 			uart_puts("IPv4:");
 			uart_puts(" src="); uart_puthex( htonl(req->src) );
 			uart_puts(" dst="); uart_puthex( htonl(req->dst) );
 			uart_puts(" proto="); uart_puthex8( req->proto );
 			uart_crlf();
+#endif
+			break;
 	}
 
 }
@@ -268,6 +271,7 @@ static void tcp4_accept(network *netif, tcp_packet *req)
 
 	if (newconn->service->accept != 0)
 		newconn->service->accept(newconn);
+#ifdef DEBUG_NET
 	else
 	{
 		uart_puts(" * ACCEPT from=");
@@ -276,6 +280,7 @@ static void tcp4_accept(network *netif, tcp_packet *req)
 		uart_puts(" remote port="); uart_puthex16(newconn->port_remote);
 		uart_crlf();
 	}
+#endif
 
 	rsp->flags |= TCP_SYN;
 	rsp->seq    = htonl(newconn->seq_local);

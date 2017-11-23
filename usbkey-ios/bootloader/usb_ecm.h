@@ -15,8 +15,14 @@
  */
 #ifndef USB_ECM_H
 #define USB_ECM_H
-
+#include "log.h"
 #include "usb.h"
+
+#ifdef DEBUG_USB
+#define ECM_PUTS(x) DBG_PUTS(x)
+#else
+#define ECM_PUTS(x) {}
+#endif
 
 void ecm_init(usb_module *mod, usb_class *obj);
 void ecm_rx_prepare(usb_module *mod);

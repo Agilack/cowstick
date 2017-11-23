@@ -90,7 +90,7 @@ static void dhcpd_discover(network *netif, udp_packet *udp, int is_dhcp)
 
 	dhcp_packet *pkt = (dhcp_packet *)( ((u8 *)udp) + 8);
 
-	uart_puts("DHCP DISCOVER\r\n");
+	DHCP_PUTS("DHCP DISCOVER\r\n");
 
 	/* Initialize a temporary UDP connection */
 	conn.ip_remote   = 0xFFFFFFFF;
@@ -168,7 +168,7 @@ static void dhcpd_request(network *netif, udp_packet *udp)
 
 	dhcp_packet *pkt = (dhcp_packet *)( ((u8 *)udp) + 8);
 
-	uart_puts("DHCP REQUEST\r\n");
+	DHCP_PUTS("DHCP REQUEST\r\n");
 
 	/* Initialize a temporary UDP connection */
 	conn.ip_remote   = 0xFFFFFFFF;

@@ -15,8 +15,14 @@
  */
 #ifndef NET_IPV4_H
 #define NET_IPV4_H
-
+#include "log.h"
 #include "types.h"
+
+#ifdef DEBUG_NET
+#define NET_PUTS(c) DBG_PUTS(x)
+#else
+#define NET_PUTS(x) {}
+#endif
 
 #define IP_PROTO_ICMP 01
 #define IP_PROTO_IGMP 02

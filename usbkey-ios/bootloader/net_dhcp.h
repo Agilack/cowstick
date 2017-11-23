@@ -15,8 +15,15 @@
  */
 #ifndef NET_DHCP_H
 #define NET_DHCP_H
+#include "log.h"
 #include "types.h"
 #include "net_ipv4.h"
+
+#ifdef DEBUG_DHCP
+#define DHCP_PUTS(x) DBG_PUTS(x)
+#else
+#define DHCP_PUTS(x) {}
+#endif
 
 #define DHCP_DISCOVER 1
 #define DHCP_OFFER    2
