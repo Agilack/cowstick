@@ -46,3 +46,17 @@ api_uart: /* Offset 0xF0 */
 
 api_net: /* Offset 0x100 */
 	.long net_init
+	.long net_periodic
+	.long net_tx_buffer
+	.long net_send
+	/* Offset 0x110 */
+	.long ipv4_init
+	.long ipv4_tx_buffer
+	.long ipv4_send
+	.long ip_cksum
+	/* Offset 0x120 */
+	.long udp4_tx_buffer
+	.long udp4_send
+	.long tcp4_tx_buffer
+	.long tcp4_send
+	.long tcp4_close
