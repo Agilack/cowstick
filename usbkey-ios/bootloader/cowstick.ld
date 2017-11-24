@@ -32,7 +32,8 @@ MEMORY
 }
 
 /* The stack size used by the application. NOTE: you need to adjust according to your application. */
-STACK_SIZE = DEFINED(STACK_SIZE) ? STACK_SIZE : DEFINED(__stack_size__) ? __stack_size__ : 0x2000;
+STACK_START = 0x5800;
+STACK_SIZE  = 0x2000;
 
 /* Section Definitions */
 SECTIONS
@@ -122,9 +123,9 @@ SECTIONS
     } > ram
 
     /* stack section */
-    .stack (NOLOAD):
+    .stack 0x20000000:
     {
-        . = ALIGN(8);
+        . = STACK_START;
         _sstack = .;
         . = . + STACK_SIZE;
         . = ALIGN(8);

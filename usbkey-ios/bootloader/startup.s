@@ -17,18 +17,6 @@
     .syntax unified
     .arch armv6-m
 
-/* -- Stack and Head sections ---------------------------------------------- */
-    .section .stack
-    .align 3
-    .equ    Stack_Size, 0x2000
-    .globl    __StackTop
-    .globl    __StackLimit
-__StackLimit:
-    .space    Stack_Size
-    .size __StackLimit, . - __StackLimit
-__StackTop:
-    .size __StackTop, . - __StackTop
-
 /* -- Vector Table --------------------------------------------------------- */
 
     .section .vectors
@@ -36,7 +24,7 @@ __StackTop:
     .globl __vectors
 __vectors:
     /* Cortex M0 Handlers */
-    .long   __StackTop                  /* Top of Stack                     */
+    .long   _estack                     /* Top of Stack                     */
     .long   Reset_Handler               /* Reset Handler                    */
     .long   NMI_Handler                 /* NMI Handler                      */
     .long   HardFault_Handler           /* Hard Fault Handler               */

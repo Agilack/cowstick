@@ -94,13 +94,16 @@ typedef struct _tcp_conn
 	tcp_packet *rsp;
 	struct _network  *netif;
 	struct _tcp_service *service;
+	int (*closed) (struct _tcp_conn *conn);
 	int (*process)(struct _tcp_conn *conn, u8 *data, int len);
+	int (*tx_more)(struct _tcp_conn *conn);
 } tcp_conn;
 
 typedef struct _tcp_service
 {
 	u16   port;
 	int (*accept) (tcp_conn *conn);
+	int (*closed) (tcp_conn *conn);
 	int (*process)(tcp_conn *conn, u8 *data, int len);
 	void *priv;
 } tcp_service;

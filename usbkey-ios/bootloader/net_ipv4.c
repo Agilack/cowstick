@@ -41,7 +41,9 @@ void ipv4_init(network *mod)
 	{
 		mod->tcp.conns[i].ip_remote = 0;
 		mod->tcp.conns[i].state     = TCP_CONN_CLOSED;
+		mod->tcp.conns[i].closed    = 0;
 		mod->tcp.conns[i].process   = 0;
+		mod->tcp.conns[i].tx_more   = 0;
 	}
 }
 
@@ -235,7 +237,9 @@ static void tcp4_accept(network *netif, tcp_packet *req)
 		newconn->seq_remote = htonl(req->seq) + 1;
 		newconn->state      = TCP_CONN_SYN;
 		newconn->netif      = netif;
+		newconn->closed     = 0;
 		newconn->process    = 0;
+		newconn->tx_more    = 0;
 
 		break;
 	}
@@ -269,8 +273,14 @@ static void tcp4_accept(network *netif, tcp_packet *req)
 	if (newconn->process == 0)
 		goto reject;
 
+	/* If the specified service contains an 'accept' method */
 	if (newconn->service->accept != 0)
-		newconn->service->accept(newconn);
+	{
+		int ret;
+		ret = newconn->service->accept(newconn);
+		if (ret)
+			goto reject;
+	}
 #ifdef DEBUG_NET
 	else
 	{
@@ -428,6 +438,8 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 		if (req->flags & TCP_ACK)
 		{
 			uart_puts("TCP4: Connection closed\r\n");
+			if ((conn->service != 0) && (conn->service->closed != 0))
+				conn->service->closed(conn);
 			conn->ip_remote = 0;
 			conn->state = TCP_CONN_CLOSED;
 		}
@@ -466,6 +478,8 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 			tcp4_tx_wait(conn);
 
 			uart_puts("TCP4: Connection closed\r\n");
+			if ((conn->service != 0) && (conn->service->closed != 0))
+				conn->service->closed(conn);
 			conn->ip_remote = 0;
 			conn->state = TCP_CONN_CLOSED;
 		}
@@ -485,6 +499,13 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 		{
 			/* Save it ! Note : Big security issue, but we assume to trust this link */
 			conn->seq_local = htonl(req->ack);
+
+			if (conn->tx_more)
+			{
+				conn->tx_more(conn);
+				// TODO: temporary reset of dlen to avoid bi-directional collision
+				dlen = 0;
+			}
 		}
 
 		if  ( (dlen > 0) || (req->flags & TCP_FIN) )
@@ -553,14 +574,15 @@ void tcp4_send(tcp_conn *conn, int len)
 	u8 dest_addr[4] = {0x0A,0x0a,0x0a,0x03};
 	u16 *ip_src=(void *)&src_addr;
 	u16 *ip_dst=(void *)&dest_addr;
-	u32 sum = 0;
+	u32 sum;
 	int hlen, tmp_len;
-	tcp_packet *pkt = conn->rsp;
-	u16 *p = (u16 *)pkt;
+	tcp_packet *pkt;
+	u16 *p;
 
 	if (conn == 0)
 		return;
 
+	pkt   = conn->rsp;
 	netif = conn->netif;
 
 	/* Compute the TCP header length */
@@ -574,6 +596,8 @@ void tcp4_send(tcp_conn *conn, int len)
 	pkt->cksum = 0x0000;
 
 	/* Sum all values of TCP header and datas */
+	p   = (u16 *)pkt;
+	sum = 0;
 	tmp_len = hlen + len;
 	while (tmp_len > 1)
 	{

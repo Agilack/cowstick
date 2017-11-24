@@ -26,10 +26,9 @@ void Jumper(u32 fct, u32 stack);
 static void bootloader(void);
 
 usb_module usbmod;
-usb_class  ecm_class;
-u8 ep1[64];
 
-static int echo_accept(tcp_conn *conn);
+static int echo_accept (tcp_conn *conn);
+static int echo_closed (tcp_conn *conn);
 static int echo_process(tcp_conn *conn, u8 *data, int len);
 
 /**
@@ -70,9 +69,8 @@ int main(void)
 }
 
 /* Bootloader variables */
-network  bl_net_cfg;
-u8       bl_net_rx_buffer[512];
-u8       bl_net_tx_buffer[512];
+static u8 bl_net_rx_buffer[512];
+static u8 bl_net_tx_buffer[512];
 
 /**
  * @brief Main function when start in bootloader mode
@@ -80,8 +78,10 @@ u8       bl_net_tx_buffer[512];
  */
 static void bootloader(void)
 {
-	tcp_conn    bl_tcp_conns[2];
-	tcp_service bl_tcp_services;
+	usb_class   ecm_class;
+	network     net_cfg;
+	tcp_conn    tcp_conns[2];
+	tcp_service tcp_services;
 
 	/* Initialize UART debug port */
 	uart_init();
@@ -91,33 +91,34 @@ static void bootloader(void)
 	uart_puts("--=={ Cowstick Bootloader }==--\r\n");
 
 	/* DEBUG: Dummy service used to test TCP layer */
-	bl_tcp_services.port    = 1234;
-	bl_tcp_services.accept  = echo_accept;
-	bl_tcp_services.process = echo_process;
-	bl_tcp_services.priv    = 0;
+	tcp_services.port    = 1234;
+	tcp_services.accept  = echo_accept;
+	tcp_services.closed  = echo_closed;
+	tcp_services.process = echo_process;
+	tcp_services.priv    = 0;
 
 	/* Init TCP connections */
-	bl_net_cfg.tcp.conns = &bl_tcp_conns[0];
-	bl_net_cfg.tcp.conn_count = 2;
+	net_cfg.tcp.conns = &tcp_conns[0];
+	net_cfg.tcp.conn_count = 2;
 	/* Init TCP services */
-	bl_net_cfg.tcp.services = &bl_tcp_services;
-	bl_net_cfg.tcp.service_count = 1;
+	net_cfg.tcp.services = &tcp_services;
+	net_cfg.tcp.service_count = 1;
 	/* Initialize network interface */
-	net_init(&bl_net_cfg);
+	net_init(&net_cfg);
 	/* Configure network interface : set RX/TX buffers */
-	bl_net_cfg.rx_buffer = bl_net_rx_buffer;
-	bl_net_cfg.rx_length = 0;
-	bl_net_cfg.rx_state  = 0;
-	bl_net_cfg.tx_buffer = bl_net_tx_buffer;
-	bl_net_cfg.tx_more   = 0;
+	net_cfg.rx_buffer = bl_net_rx_buffer;
+	net_cfg.rx_length = 0;
+	net_cfg.rx_state  = 0;
+	net_cfg.tx_buffer = bl_net_tx_buffer;
+	net_cfg.tx_more   = 0;
 	/* Save pointer to USB ECM driver */
-	bl_net_cfg.driver    = (void *)&usbmod;
+	net_cfg.driver    = (void *)&usbmod;
 
 	/* Configure USB device (and attach it) */
 	memset(&usbmod, 0, sizeof(usb_module));
 	usbmod.desc = (u8*)usb_ecm_desc;
 	ecm_init(&usbmod, &ecm_class);
-	ecm_class.priv = (void *)&bl_net_cfg;
+	ecm_class.priv = (void *)&net_cfg;
 	usb_config(&usbmod);
 
 	led_status(0x00020006);
@@ -127,7 +128,7 @@ static void bootloader(void)
 	/* Infinite loop for firmware events */
 	while(1)
 	{
-		net_periodic(&bl_net_cfg);
+		net_periodic(&net_cfg);
 	}
 }
 
@@ -148,12 +149,47 @@ static int echo_accept(tcp_conn *conn)
 
 	return 0;
 }
+
+static int echo_closed(tcp_conn *conn)
+{
+	(void)conn;
+
+	uart_puts("Dummy service ECHO - Connection closed\r\n");
+
+	return 0;
+}
+
+static int echo_more(tcp_conn *conn)
+{
+	u8 *buffer = tcp4_tx_buffer(conn);
+
+	conn->tx_more = 0;
+
+	memcpy(buffer, "Echo:\0", 6);
+	tcp4_send(conn, 6);
+
+	return(1);
+}
+
 static int echo_process(tcp_conn *conn, u8 *data, int len)
 {
 	uart_puts("Dummy service ECHO - Recv\r\n");
 	uart_dump(data, len);
 
-	if (data[0] == 'q')
+	if (data[0] == ' ')
+	{
+		u8 *buffer = tcp4_tx_buffer(conn);
+
+		conn->tx_more = echo_more;
+
+		memcpy(buffer, "Multiline demo\r\n\0", 17);
+		tcp4_send(conn, 17);
+	}
+	else if (data[0] == 'd')
+	{
+		uart_dump((u8 *)0x20007000, 0x1000);
+	}
+	else if (data[0] == 'q')
 	{
 		u8 *buffer = tcp4_tx_buffer(conn);
 

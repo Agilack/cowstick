@@ -30,8 +30,7 @@ static const u8 hex[16] = "0123456789ABCDEF";
  */
 void uart_crlf(void)
 {
-	uart_putc('\r');
-	uart_putc('\n');
+	uart_puts("\r\n");
 }
 
 /**
