@@ -1,6 +1,6 @@
 /**
- * @file  types.h
- * @brief Declaration for common types
+ * @file  flash.h
+ * @brief Definitions and function prototypes for internal flash-memory access
  *
  * @author Saint-Genest Gwenael <gwen@cowlab.fr>
  * @copyright Cowlab (c) 2017
@@ -13,20 +13,13 @@
  * License along with this program, see LICENSE.md file for more details.
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
-#ifndef TYPES_H
-#define TYPES_H
+#ifndef FLASH_H
+#define FLASH_H
 
-typedef unsigned int   uint;
-typedef unsigned long  u32;
-typedef unsigned short u16;
-typedef unsigned char  u8;
-typedef volatile unsigned long  vu32;
-typedef volatile unsigned short vu16;
-typedef volatile unsigned char  vu8;
+#include "types.h"
 
-typedef int		ptrdiff_t;
-
-#define NULL 0
-#define __IO volatile
+int  flash_erase(u32 addr);
+void flash_write(u32 addr, u8 *data);
 
 #endif
+/* EOF */
