@@ -18,5 +18,10 @@
 
 void *memcpy (void *dst, const void *src, int n);
 void *memset (void *dst, int value, int n);
+#ifdef USE_LIBC_STRING
+char *strcpy (char *dest, const char *src);
+int   strlen (const char *str);
+char *strncpy(char *dest, const char *src, int len);
+#endif
 
 #endif
