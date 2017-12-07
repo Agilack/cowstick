@@ -437,7 +437,7 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 	{
 		if (req->flags & TCP_ACK)
 		{
-			uart_puts("TCP4: Connection closed\r\n");
+			NET_PUTS("TCP4: Connection closed\r\n");
 			if ((conn->service != 0) && (conn->service->closed != 0))
 				conn->service->closed(conn);
 			conn->ip_remote = 0;
@@ -448,7 +448,7 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 	{
 		if (req->flags & TCP_ACK)
 		{
-			uart_puts("TCP4: Connection established\r\n");
+			NET_PUTS("TCP4: Connection established\r\n");
 			conn->seq_local = htonl(req->ack);
 			conn->state = TCP_CONN_ESTABLISHED;
 		}
@@ -477,7 +477,7 @@ static void tcp4_receive(network *netif, tcp_packet *req, int len)
 
 			tcp4_tx_wait(conn);
 
-			uart_puts("TCP4: Connection closed\r\n");
+			NET_PUTS("TCP4: Connection closed\r\n");
 			if ((conn->service != 0) && (conn->service->closed != 0))
 				conn->service->closed(conn);
 			conn->ip_remote = 0;

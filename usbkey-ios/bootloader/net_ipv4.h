@@ -97,6 +97,7 @@ typedef struct _tcp_conn
 	int (*closed) (struct _tcp_conn *conn);
 	int (*process)(struct _tcp_conn *conn, u8 *data, int len);
 	int (*tx_more)(struct _tcp_conn *conn);
+	void *priv;
 } tcp_conn;
 
 typedef struct _tcp_service

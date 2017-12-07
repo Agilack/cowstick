@@ -13,10 +13,10 @@
  * License along with this program, see LICENSE.md file for more details.
  * This program is distributed WITHOUT ANY WARRANTY see README file.
  */
+#include "log.h"
 #include "net.h"
 #include "net_arp.h"
 #include "libc.h"
-#include "log.h"
 
 /**
  * @brief Called when an ARP packet is received
@@ -31,18 +31,18 @@ void arp_receive(network *mod, u8 *buffer, int length)
 	
 	/* Sanity check */
 	if ((buffer == 0) || (length == 0)) {
-		DBG_PUTS("arp_receive() Bad buffer\r\n");
+		ARP_PUTS("arp_receive() Bad buffer\r\n");
 		return;
 	}
 
 	/* Test hardware type (only Ethernet is supported) */
 	if (htons(req->type)  != 0x0001) {
-		DBG_PUTS("arp_receive() Bad hardware type\r\n");
+		ARP_PUTS("arp_receive() Bad hardware type\r\n");
 		return;
 	}
 	/* Test protocol type (only IPv4 is supported) */
 	if (htons(req->proto) != 0x0800) {
-		DBG_PUTS("arp_receive() Bad protocol\r\n");
+		ARP_PUTS("arp_receive() Bad protocol\r\n");
 		return;
 	}
 
@@ -64,6 +64,7 @@ void arp_receive(network *mod, u8 *buffer, int length)
 			memcpy(rsp->dst_phy, req->src_phy, 6);
 			rsp->dst_ip= req->src_ip;
 			
+#ifdef DEBUG_ARP
 			DBG_PUTS("NET_ARP: Resquest from ");
 			DBG_PUTHEX8(req->src_phy[0]); DBG_PUTC(':');
 			DBG_PUTHEX8(req->src_phy[1]); DBG_PUTC(':');
@@ -72,6 +73,7 @@ void arp_receive(network *mod, u8 *buffer, int length)
 			DBG_PUTHEX8(req->src_phy[4]); DBG_PUTC(':');
 			DBG_PUTHEX8(req->src_phy[5]);
 			DBG_PUTS("\r\n");
+#endif
 
 			/* Send response */
 			net_send(mod, sizeof(arp_packet));

@@ -18,6 +18,12 @@
 #include "net.h"
 #include "types.h"
 
+#ifdef DEBUG_ARP
+#define ARP_PUTS(x) DBG_PUTS(x)
+#else
+#define ARP_PUTS(x) {}
+#endif
+
 typedef struct __attribute__((packed))
 {
 	u16 type;
