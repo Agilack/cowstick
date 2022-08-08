@@ -1,4 +1,4 @@
-4979594914971
+11619376326405
 cowstick-rp
 CONN_MC32604
 
@@ -6,6 +6,13 @@ CONN_MC32604
 0
 4
 4
+cowstick-rp
+I_CDRH2D14
+
+
+0
+2
+2
 cowstick-rp
 PMOD_SSW106-RA
 
@@ -20,3 +27,24 @@ QFN56
 0
 60
 57
+cowstick-rp
+SMD0603
+
+
+0
+2
+2
+cowstick-rp
+SMD0805
+
+
+0
+2
+2
+cowstick-rp
+SOT23-5
+
+
+0
+5
+5
