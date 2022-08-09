@@ -1,4 +1,4 @@
-11619376326405
+18259569372849
 cowstick-rp
 CONN_MC32604
 
@@ -28,6 +28,13 @@ QFN56
 60
 57
 cowstick-rp
+Q_3.2x2.5
+
+
+0
+4
+4
+cowstick-rp
 SMD0603
 
 
@@ -42,9 +49,30 @@ SMD0805
 2
 2
 cowstick-rp
+SOIC-8
+
+
+0
+8
+8
+cowstick-rp
 SOT23-5
 
 
 0
 5
 5
+cowstick-rp
+TP_PIN
+
+
+0
+1
+1
+cowstick-rp
+TP_SMD
+
+
+0
+1
+1

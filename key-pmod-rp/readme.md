@@ -7,3 +7,5 @@ power supplies, a level translator should be used.
 
 For the moment, this module is not supported by cowlab but will be added
 soon.
+
+![Preview of the board](https://raw.githubusercontent.com/Agilack/cowstick/master/key-pmod-rp/hardware/doc/pcb-preview.png)
