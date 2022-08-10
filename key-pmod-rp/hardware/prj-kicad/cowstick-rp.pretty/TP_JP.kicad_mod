@@ -1,0 +1,39 @@
+(footprint "TP_JP" (version 20211014) (generator pcbnew)
+  (layer "F.Cu")
+  (tedit 0)
+  (attr smd)
+  (fp_text reference "REF**" (at 0 -0.9 unlocked) (layer "F.SilkS") hide
+    (effects (font (size 0.5 0.5) (thickness 0.125)))
+    (tstamp 690ba971-9550-4667-8c71-73d5138f25a1)
+  )
+  (fp_text value "TP_JP" (at -0.6 0.7 unlocked) (layer "F.Fab") hide
+    (effects (font (size 0.2 0.2) (thickness 0.05)))
+    (tstamp cbf75f06-a568-4550-a279-ac604f3f0f5b)
+  )
+  (fp_text user "${REFERENCE}" (at 0.6 0.7 unlocked) (layer "F.Fab") hide
+    (effects (font (size 0.2 0.2) (thickness 0.05)))
+    (tstamp 97e2df15-ed45-4c46-8185-e11b23d7a39b)
+  )
+  (pad "1" smd custom (at -0.6 0) (size 0.5 0.5) (layers "F.Cu" "F.Paste" "F.Mask")
+    (options (clearance outline) (anchor rect))
+    (primitives
+      (gr_poly (pts
+          (xy -0.4 -0.45)
+          (xy 0.2 -0.45)
+          (xy 0.6 0)
+          (xy 0.2 0.45)
+          (xy -0.4 0.45)
+        ) (width 0.1) (fill yes))
+    ) (tstamp 41918a80-2a8a-438a-932a-34e812d79ece))
+  (pad "2" smd custom (at 0.6 0) (size 0.5 0.5) (layers "F.Cu" "F.Paste" "F.Mask")
+    (options (clearance outline) (anchor rect))
+    (primitives
+      (gr_poly (pts
+          (xy -0.6 -0.45)
+          (xy -0.2 0)
+          (xy -0.6 0.45)
+          (xy 0.4 0.45)
+          (xy 0.4 -0.45)
+        ) (width 0.1) (fill yes))
+    ) (tstamp a92fa114-76a6-4dd7-b571-b1263a36df1b))
+)
