@@ -1,0 +1,8 @@
+# Intermediate compilation files
+build
+*.o
+*.bin
+*.uf2
+
+# Editor temporary files
+*~
